@@ -14,9 +14,9 @@
 //!
 //! This `KmsClient` can then be used by the
 //! [`CryptoFactory`](crypto_factory::CryptoFactory) type to generate
-//! [`FileEncryptionProperties`](crate::encryption::encrypt::FileEncryptionProperties)
+//! [`FileEncryptionProperties`](parquet::encryption::encrypt::FileEncryptionProperties)
 //! for writing encrypted Parquet files and
-//! [`FileDecryptionProperties`](crate::encryption::decrypt::FileDecryptionProperties)
+//! [`FileDecryptionProperties`](parquet::encryption::decrypt::FileDecryptionProperties)
 //! for reading files.
 //!
 //! The encryption key metadata that is stored in the Parquet file is compatible with other Parquet

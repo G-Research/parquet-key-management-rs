@@ -31,6 +31,26 @@ jobs:
       - name: Clippy
         run: cargo clippy --verbose
 
+  docs:
+    name: Build docs
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-Dwarnings"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: cargo-cache-ubuntu-latest-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-ubuntu-latest-
+      - name: Build docs
+        run: cargo doc --no-deps --document-private-items
+
   test:
     if: github.event_name == 'schedule' || github.event_name == 'push' || github.event.pull_request.head.repo.id != github.event.pull_request.base.repo.id
     name: Build and Test
@@ -63,6 +83,7 @@ jobs:
     name: All required checks done
     needs:
       - lint
+      - docs
       - test
     runs-on: ubuntu-latest
     steps:
