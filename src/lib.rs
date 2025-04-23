@@ -31,10 +31,10 @@
 //! use base64::Engine;
 //! use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderBuilder};
 //! use parquet::arrow::ArrowWriter;
-//! use parquet::encryption::key_management::crypto_factory::{
+//! use parquet_key_management::crypto_factory::{
 //!     CryptoFactory, DecryptionConfiguration, EncryptionConfigurationBuilder,
 //! };
-//! use parquet::encryption::key_management::kms::{KmsClient, KmsConnectionConfig};
+//! use parquet_key_management::kms::{KmsClient, KmsConnectionConfig};
 //! use parquet::errors::{ParquetError, Result};
 //! use parquet::file::properties::WriterProperties;
 //! use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
