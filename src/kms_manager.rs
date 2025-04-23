@@ -136,10 +136,11 @@ where
     pub fn clear_expired(&self, cleanup_interval: Duration) {
         {
             let mut last_cleanup = self.last_cleanup.lock().unwrap();
-            if last_cleanup.elapsed() < cleanup_interval {
+            let instant_now = now();
+            if (instant_now - *last_cleanup) < cleanup_interval {
                 return;
             }
-            *last_cleanup = now();
+            *last_cleanup = instant_now;
         }
 
         let mut cache = self.cache.lock().unwrap();
@@ -225,11 +226,11 @@ pub mod mock_time {
 
     /// Get a [`TimeController`] that can be used to advance the time in a test
     pub fn time_controller() -> TimeController {
+        let control_guard = CONTROL_MUTEX.lock().unwrap();
         {
             let mut now_guard = MOCK_NOW.write().unwrap();
             *now_guard = Some(Instant::now());
         }
-        let control_guard = CONTROL_MUTEX.lock().unwrap();
         TimeController {
             _control_guard: control_guard,
         }

@@ -410,6 +410,8 @@ mod tests {
     }
 
     fn test_kms_client_caching(cache_lifetime: Option<Duration>) {
+        let _time_controller = crate::kms_manager::mock_time::time_controller();
+
         let kms_config = Arc::new(KmsConnectionConfig::default());
         let config = DecryptionConfiguration::builder()
             .set_cache_lifetime(cache_lifetime)
@@ -496,6 +498,8 @@ mod tests {
 
     #[test]
     fn test_kms_client_expiration() {
+        let time_controller = crate::kms_manager::mock_time::time_controller();
+
         let kms_config = Arc::new(KmsConnectionConfig::default());
         let config = DecryptionConfiguration::builder()
             .set_cache_lifetime(Some(Duration::from_secs(600)))
@@ -518,8 +522,6 @@ mod tests {
             .build()
             .unwrap();
         let serialized_key_material = key_material.serialize().unwrap();
-
-        let time_controller = crate::kms_manager::mock_time::time_controller();
 
         assert_eq!(0, kms_factory.invocations().len());
 
@@ -583,6 +585,8 @@ mod tests {
     }
 
     fn round_trip_encryption_properties(double_wrapping: bool) {
+        let _time_controller = crate::kms_manager::mock_time::time_controller();
+
         let kms_config = Arc::new(
             KmsConnectionConfig::builder()
                 .set_kms_instance_id("DEFAULT".to_owned())
@@ -651,6 +655,8 @@ mod tests {
 
     #[test]
     fn test_key_encryption_key_caching() {
+        let time_controller = crate::kms_manager::mock_time::time_controller();
+
         let kms_config = Arc::new(KmsConnectionConfig::default());
         let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
             .set_double_wrapping(true)
@@ -683,8 +689,6 @@ mod tests {
         let retrieve_key = |props: &FileDecryptionProperties| {
             props.footer_key(footer_key_metadata.as_deref()).unwrap();
         };
-
-        let time_controller = crate::kms_manager::mock_time::time_controller();
 
         assert_eq!(0, kms_factory.keys_unwrapped());
 
