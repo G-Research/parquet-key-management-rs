@@ -1,0 +1,37 @@
+name: Check required jobs
+
+# This workflow is triggered when a workflow run for the CI is completed.
+# It checks if the "All required checks done" job was actually successful
+# (and not just skipped) and creates a check run if that is the case. The
+# check run can be used to protect the main branch from being merged if the
+# CI is not passing. We need to use a GitHub app token to create the check
+# run because otherwise the check suite will be assigned to the first workflow
+# run for the CI, which might not be the latest one. See
+# https://github.com/orgs/community/discussions/24616#discussioncomment-6088422
+# for more details.
+
+on:
+  workflow_run:
+    workflows: [CI]
+
+permissions:
+  actions: read
+  checks: write
+
+jobs:
+  required-jobs:
+    name: Check required jobs
+    if: ${{ !github.event.repository.fork }}
+    environment: create-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate an app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: G-Research/common-actions/check-required@main
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
