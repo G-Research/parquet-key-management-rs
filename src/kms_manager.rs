@@ -1,7 +1,7 @@
 use crate::kms::{KmsClientFactory, KmsClientRef, KmsConnectionConfig};
 use parquet::errors::Result;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};

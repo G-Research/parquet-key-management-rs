@@ -3,10 +3,10 @@
 //! KMS interactions.
 
 use crate::kms::{KmsClient, KmsClientFactory, KmsClientRef, KmsConnectionConfig};
-use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use parquet::errors::{ParquetError, Result};
-use ring::aead::{AES_128_GCM, Aad, LessSafeKey, NONCE_LEN, UnboundKey};
+use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
 use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};

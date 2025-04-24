@@ -3,12 +3,12 @@ use crate::key_encryption::encrypt_encryption_key;
 use crate::key_material::KeyMaterialBuilder;
 use crate::kms::KmsConnectionConfig;
 use crate::kms_manager::KmsManager;
-use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use parquet::errors::Result;
 use ring::rand::{SecureRandom, SystemRandom};
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 

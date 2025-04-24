@@ -1,9 +1,9 @@
 //! Encryption and decryption of data encryption keys (DEKs) with key encryption keys (KEKs)
 
-use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use parquet::errors::{ParquetError, Result};
-use ring::aead::{AES_128_GCM, Aad, LessSafeKey, NONCE_LEN, UnboundKey};
+use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
 use ring::rand::{SecureRandom, SystemRandom};
 
 /// Encrypt a DEK with a KEK using AES-GCM
