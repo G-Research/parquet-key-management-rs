@@ -20,10 +20,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo
           key: cargo-cache-lint-${{ hashFiles('Cargo.toml') }}
           restore-keys: cargo-cache-lint-
       - name: Format check
@@ -40,10 +37,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo
           key: cargo-cache-docs-${{ hashFiles('Cargo.toml') }}
           restore-keys: cargo-cache-docs-
       - name: Build docs
@@ -65,10 +59,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo
           key: cargo-cache-test-${{ matrix.runner }}-${{ hashFiles('Cargo.toml') }}
           restore-keys: cargo-cache-test-${{ matrix.runner }}-
       - name: Build
@@ -86,10 +77,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
+            ~/.cargo
           key: cargo-cache-msrv-${{ hashFiles('Cargo.toml') }}
           restore-keys: cargo-cache-msrv-
       - name: Install cargo-msrv
