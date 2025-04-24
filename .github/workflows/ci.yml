@@ -24,8 +24,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: cargo-cache-ubuntu-latest-${{ hashFiles('Cargo.toml') }}
-          restore-keys: cargo-cache-ubuntu-latest-
+          key: cargo-cache-lint-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-lint-
       - name: Format check
         run: cargo fmt --verbose --check
       - name: Clippy
@@ -34,8 +34,6 @@ jobs:
   docs:
     name: Build docs
     runs-on: ubuntu-latest
-    env:
-      RUSTDOCFLAGS: "-Dwarnings"
     steps:
       - uses: actions/checkout@v4
       - name: Cache cargo
@@ -46,10 +44,12 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: cargo-cache-ubuntu-latest-${{ hashFiles('Cargo.toml') }}
-          restore-keys: cargo-cache-ubuntu-latest-
+          key: cargo-cache-docs-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-docs-
       - name: Build docs
         run: cargo doc --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: "-Dwarnings"
 
   test:
     if: github.event_name == 'schedule' || github.event_name == 'push' || github.event.pull_request.head.repo.id != github.event.pull_request.base.repo.id
@@ -69,8 +69,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: cargo-cache-${{ matrix.runner }}-${{ hashFiles('Cargo.toml') }}
-          restore-keys: cargo-cache-${{ matrix.runner }}-
+          key: cargo-cache-test-${{ matrix.runner }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-test-${{ matrix.runner }}-
       - name: Build
         run: cargo build --verbose
       - name: Test
