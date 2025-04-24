@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  pull_request:
+  schedule:
+    - cron: "43 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+          key: cargo-cache-lint-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-lint-
+      - name: Format check
+        run: cargo fmt --verbose --check
+      - name: Clippy
+        run: cargo clippy --verbose
+
+  docs:
+    name: Build docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+          key: cargo-cache-docs-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-docs-
+      - name: Build docs
+        run: cargo doc --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: "-Dwarnings"
+
+  test:
+    name: Build and Test
+    strategy:
+      matrix:
+        runner: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+          key: cargo-cache-test-${{ matrix.runner }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-test-${{ matrix.runner }}-
+      - name: Build
+        run: cargo build --verbose
+      - name: Test
+        run: cargo test --verbose
+
+  msrv:
+    name: Verify minimum supported Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+          key: cargo-cache-msrv-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-msrv-
+      - name: Install cargo-msrv
+        run: cargo install cargo-msrv
+      - name: Verify MSRV
+        run: cargo msrv verify --manifest-path Cargo.toml
+
+  # A single job that succeeds if all jobs listed under 'needs' succeed.
+  # This allows to configure a single job as a required check.
+  # The 'needed' jobs then can be changed through pull-requests.
+  all-jobs-succeeded:
+    name: All jobs succeeded
+    if: always()
+    # the if clauses below have to reflect the number of jobs listed here
+    needs:
+      - lint
+      - docs
+      - test
+      - msrv
+    env:
+      RESULTS: ${{ join(needs.*.result, ',') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Success"
+        # we expect all required jobs to have success result
+        if: env.RESULTS == 'success,success,success,success'
+        run: true
+        shell: bash
+      - name: "Failure"
+        # we expect all required jobs to have success result, fail otherwise
+        if: env.RESULTS != 'success,success,success,success'
+        run: false
+        shell: bash
