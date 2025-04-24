@@ -21,3 +21,11 @@ arrow = { version = ">=55.0.0", default-features = false }
 arrow-array = { version = ">=55.0.0", default-features = false }
 parquet = { version = ">=55.0.0", default-features = false, features = ["arrow", "encryption"] }
 tempfile = { version = "3.0", default-features = false }
+
+[features]
+default = []
+_test_utils = []
+
+[[test]]
+name = "round_trip"
+required-features = ["_test_utils"]

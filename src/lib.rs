@@ -199,5 +199,6 @@ mod key_unwrapper;
 mod key_wrapper;
 pub mod kms;
 mod kms_manager;
-#[cfg(test)]
-mod test_kms;
+#[cfg(any(test, feature = "_test_utils"))]
+#[doc(hidden)]
+pub mod test_kms;
