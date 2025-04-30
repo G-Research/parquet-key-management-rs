@@ -141,7 +141,8 @@ impl KeyMaterial {
     pub fn deserialize(key_material: &str) -> Result<Self> {
         let material: KeyMaterial = serde_json::from_str(key_material).map_err(|e| {
             ParquetError::General(format!(
-                "Error deserializing JSON encryption key material: {}",
+                "Error deserializing JSON encryption key material: {}. \
+                Perhaps this file was encrypted without using a KMS?",
                 e
             ))
         })?;

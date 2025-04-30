@@ -1,6 +1,8 @@
 use arrow_array::{ArrayRef, Float32Array, Int32Array, RecordBatch};
 use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderBuilder};
 use parquet::arrow::ArrowWriter;
+use parquet::encryption::decrypt::FileDecryptionProperties;
+use parquet::encryption::encrypt::FileEncryptionProperties;
 use parquet::errors::Result;
 use parquet::file::properties::WriterProperties;
 use parquet_key_management::crypto_factory::{
@@ -56,6 +58,31 @@ fn per_column_encryption_double_wrapping() {
     round_trip_parquet(encryption_config, decryption_config).unwrap();
 }
 
+#[test]
+fn write_with_keys_and_read_with_kms() {
+    let footer_key = b"0123456789012345";
+    let encryption_properties = FileEncryptionProperties::builder(footer_key.to_vec())
+        .build()
+        .unwrap();
+
+    let crypto_factory = CryptoFactory::new(TestKmsClientFactory::with_default_keys());
+    let kms_config = Arc::new(KmsConnectionConfig::default());
+    let decryption_config = DecryptionConfiguration::builder().build();
+    let decryption_properties = crypto_factory
+        .file_decryption_properties(kms_config, decryption_config)
+        .unwrap();
+
+    let result = round_trip_parquet_with_properties(encryption_properties, decryption_properties);
+
+    match result {
+        Ok(_) => panic!("Expected an error when reading encrypted Parquet that doesn't use a KMS"),
+        Err(err) => {
+            let message = err.to_string();
+            assert!(message.contains(". Perhaps this file was encrypted without using a KMS"));
+        }
+    }
+}
+
 fn round_trip_parquet(
     encryption_config: EncryptionConfiguration,
     decryption_config: DecryptionConfiguration,
@@ -67,6 +94,13 @@ fn round_trip_parquet(
     let decryption_properties =
         crypto_factory.file_decryption_properties(kms_config, decryption_config)?;
 
+    round_trip_parquet_with_properties(encryption_properties, decryption_properties)
+}
+
+fn round_trip_parquet_with_properties(
+    encryption_properties: FileEncryptionProperties,
+    decryption_properties: FileDecryptionProperties,
+) -> Result<()> {
     let temp_dir = TempDir::new()?;
     let file_path = temp_dir.path().join("test_file.parquet");
 
