@@ -75,6 +75,10 @@ impl KeyUnwrapper {
         key_encryption::decrypt_encryption_key(wrapped_dek, &decoded_kek_id, kek)
     }
 
+    /// If the KMS instance ID or URL weren't provided in the connection configuration,
+    /// try to read them from the footer key metadata.
+    /// When a configuration value is present in both the file metadata and connection configuration,
+    /// the value from the connection configuration takes precedence.
     fn update_kms_config_from_footer_metadata(
         &self,
         kms_instance_id: &str,
