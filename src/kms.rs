@@ -59,7 +59,10 @@ impl KmsConnectionConfig {
         &self.custom_kms_conf
     }
 
-    /// Update the authorization token to be passed to the KMS.
+    /// Update the access token to be passed to the KMS.
+    /// This method is provided to support KMSs that use an access token that can expire.
+    /// Refreshing the access token will cause new KMS client instances to be created when needed
+    /// rather than using previously cached clients that have an old access token.
     pub fn refresh_key_access_token(&self, key_access_token: String) {
         let mut token = self.key_access_token.write().unwrap();
         *token = key_access_token;
