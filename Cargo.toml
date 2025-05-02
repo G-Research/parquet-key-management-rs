@@ -1,31 +1,15 @@
-[package]
-name = "parquet-key-management"
+[workspace]
+
+members = [
+    "parquet-key-management",
+]
+
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
-description = "Implements the Parquet Key Management Tools API in Rust to enable integration with a Key Management Server when using Parquet modular encryption."
-edition = "2021"
-rust-version = "1.81"
 homepage = "https://github.com/G-Research/parquet-key-management-rs"
 repository = "https://github.com/G-Research/parquet-key-management-rs"
 license = "Apache-2.0"
-keywords = ["parquet", "encryption", "kms", "arrow"]
-
-[dependencies]
-base64 = { version = "0.22", default-features = false, features = ["std"] }
-parquet = { version = ">=55.0.0", default-features = false, features = ["encryption"] }
-ring = { version = "0.17", default-features = false, features = ["std"] }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-serde_json = { version = "1.0", default-features = false, features = ["std"] }
-
-[dev-dependencies]
-arrow = { version = ">=55.0.0", default-features = false }
-arrow-array = { version = ">=55.0.0", default-features = false }
-parquet = { version = ">=55.0.0", default-features = false, features = ["arrow", "encryption"] }
-tempfile = { version = "3.0", default-features = false }
-
-[features]
-default = []
-_test_utils = []
-
-[[test]]
-name = "round_trip"
-required-features = ["_test_utils"]
+edition = "2021"
+rust-version = "1.81"

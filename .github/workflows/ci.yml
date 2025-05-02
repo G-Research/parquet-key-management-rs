@@ -84,7 +84,7 @@ jobs:
       - name: Install cargo-msrv
         run: cargo install cargo-msrv
       - name: Verify MSRV
-        run: cargo msrv verify --manifest-path Cargo.toml
+        run: cargo msrv verify --manifest-path parquet-key-management/Cargo.toml
 
   # A single job that succeeds if all jobs listed under 'needs' succeed.
   # This allows to configure a single job as a required check.
