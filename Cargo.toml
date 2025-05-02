@@ -2,6 +2,7 @@
 
 members = [
     "parquet-key-management",
+    "generate-test-files",
 ]
 
 resolver = "2"

@@ -1,0 +1,14 @@
+[package]
+name = "generate-test-files"
+version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+arrow = "55.0.0"
+arrow-array = "55.0.0"
+parquet = { version = "55.0.0", features = ["encryption", "arrow"] }
+parquet-key-management = { version = "0.1.0", path = "../parquet-key-management", features = ["_test_utils"] }
