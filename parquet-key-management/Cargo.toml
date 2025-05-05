@@ -29,3 +29,7 @@ _test_utils = []
 [[test]]
 name = "round_trip"
 required-features = ["_test_utils"]
+
+[[test]]
+name = "integration_tests"
+required-features = ["_test_utils"]

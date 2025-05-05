@@ -68,6 +68,8 @@ jobs:
         run: cargo build --verbose
       - name: Test
         run: cargo test --all-features --verbose
+      - name: Integration Test
+        run: ./ci/run_integration_tests.sh
 
   msrv:
     name: Verify minimum supported Rust version
