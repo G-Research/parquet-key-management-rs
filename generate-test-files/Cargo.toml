@@ -8,7 +8,7 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-arrow = "55.0.0"
-arrow-array = "55.0.0"
-parquet = { version = "55.0.0", features = ["encryption", "arrow"] }
 parquet-key-management = { version = "0.1.0", path = "../parquet-key-management", features = ["_test_utils"] }
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+parquet = { workspace = true, features = ["arrow", "snap"] }

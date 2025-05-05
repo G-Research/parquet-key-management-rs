@@ -14,3 +14,8 @@ repository = "https://github.com/G-Research/parquet-key-management-rs"
 license = "Apache-2.0"
 edition = "2021"
 rust-version = "1.81"
+
+[workspace.dependencies]
+arrow = { version = ">=55.0.0", default-features = false }
+arrow-array = { version = ">=55.0.0", default-features = false }
+parquet = { version = ">=55.0.0", default-features = false, features = ["encryption"] }
