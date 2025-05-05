@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -x
 
 # Default to RUNNER_TEMP dir, which is set when running in GitHub Actions
 DATA_DIR=${RUNNER_TEMP:-/tmp}
