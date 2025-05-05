@@ -1,0 +1,35 @@
+[package]
+name = "parquet-key-management"
+description = "Implements the Parquet Key Management Tools API in Rust to enable integration with a Key Management Server when using Parquet modular encryption."
+keywords = ["parquet", "encryption", "kms", "arrow"]
+version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+base64 = { version = "0.22", default-features = false, features = ["std"] }
+parquet = { workspace = true }
+ring = { version = "0.17", default-features = false, features = ["std"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+parquet = { workspace = true, features = ["arrow"] }
+tempfile = { version = "3.0", default-features = false }
+
+[features]
+default = []
+_test_utils = []
+
+[[test]]
+name = "round_trip"
+required-features = ["_test_utils"]
+
+[[test]]
+name = "integration_tests"
+required-features = ["_test_utils"]
