@@ -83,6 +83,40 @@ fn write_with_keys_and_read_with_kms() {
     }
 }
 
+#[test]
+fn multi_file_round_trip() {
+    let encryption_config = EncryptionConfiguration::builder("kf".into())
+        .set_double_wrapping(true)
+        .add_column_key("kc1".into(), vec!["x".into()])
+        .add_column_key("kc2".into(), vec!["y".into(), "z".into()])
+        .set_cache_lifetime(None)
+        .build();
+
+    let write_client_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+    let read_client_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+
+    let write_crypto_factory = CryptoFactory::new(write_client_factory.clone());
+    let read_crypto_factory = CryptoFactory::new(read_client_factory.clone());
+
+    let kms_config = Arc::new(KmsConnectionConfig::default());
+
+    for _ in 0..5 {
+        let encryption_properties = write_crypto_factory
+            .file_encryption_properties(kms_config.clone(), &encryption_config)
+            .unwrap();
+
+        let decryption_config = DecryptionConfiguration::builder().build();
+        let decryption_properties = read_crypto_factory
+            .file_decryption_properties(kms_config.clone(), decryption_config)
+            .unwrap();
+
+        round_trip_parquet_with_properties(encryption_properties, decryption_properties).unwrap()
+    }
+
+    assert_eq!(write_client_factory.keys_wrapped(), 3);
+    assert_eq!(read_client_factory.keys_unwrapped(), 3);
+}
+
 fn round_trip_parquet(
     encryption_config: EncryptionConfiguration,
     decryption_config: DecryptionConfiguration,
