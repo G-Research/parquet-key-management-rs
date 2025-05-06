@@ -2,7 +2,7 @@ use crate::crypto_factory::DecryptionConfiguration;
 use crate::key_encryption;
 use crate::key_material::KeyMaterial;
 use crate::kms::KmsConnectionConfig;
-use crate::kms_manager::{KekCache, KmsManager};
+use crate::kms_manager::{KekReadCache, KmsManager};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use parquet::encryption::decrypt::KeyRetriever;
@@ -15,7 +15,7 @@ pub(crate) struct KeyUnwrapper {
     kms_manager: Arc<KmsManager>,
     kms_connection_config: RwLock<Arc<KmsConnectionConfig>>,
     decryption_configuration: DecryptionConfiguration,
-    kek_cache: KekCache,
+    kek_cache: KekReadCache,
 }
 
 impl KeyUnwrapper {
@@ -24,7 +24,7 @@ impl KeyUnwrapper {
         kms_connection_config: Arc<KmsConnectionConfig>,
         decryption_configuration: DecryptionConfiguration,
     ) -> Self {
-        let kek_cache = kms_manager.get_kek_cache(
+        let kek_cache = kms_manager.get_kek_read_cache(
             &kms_connection_config,
             decryption_configuration.cache_lifetime(),
         );

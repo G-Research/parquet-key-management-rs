@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 /// Cache of key encryption keys (KEKs) to use when decrypting files,
 /// keyed by their base64 encoded key id
-pub(crate) type KekCache = Arc<Mutex<HashMap<String, Vec<u8>>>>;
+pub(crate) type KekReadCache = Arc<Mutex<HashMap<String, Vec<u8>>>>;
 
 // Key encryption key (KEK) struct with extra metadata required when encrypting files
 pub(crate) struct KeyEncryptionKey {
@@ -26,7 +26,7 @@ pub(crate) type KekWriteCache = Arc<Mutex<HashMap<String, KeyEncryptionKey>>>;
 pub(crate) struct KmsManager {
     kms_client_factory: Box<dyn KmsClientFactory>,
     kms_client_cache: ExpiringCache<ClientKey, KmsClientRef>,
-    kek_caches: ExpiringCache<KekCacheKey, KekCache>,
+    kek_read_caches: ExpiringCache<KekCacheKey, KekReadCache>,
     kek_write_caches: ExpiringCache<KekCacheKey, KekWriteCache>,
 }
 
@@ -38,7 +38,7 @@ impl KmsManager {
         Self {
             kms_client_factory: Box::new(kms_client_factory),
             kms_client_cache: ExpiringCache::new(),
-            kek_caches: ExpiringCache::new(),
+            kek_read_caches: ExpiringCache::new(),
             kek_write_caches: ExpiringCache::new(),
         }
     }
@@ -62,14 +62,14 @@ impl KmsManager {
             })
     }
 
-    pub fn get_kek_cache(
+    pub fn get_kek_read_cache(
         &self,
         kms_connection_config: &Arc<KmsConnectionConfig>,
         cache_lifetime: Option<Duration>,
-    ) -> KekCache {
+    ) -> KekReadCache {
         self.clear_expired_entries(cache_lifetime);
         let key = KekCacheKey::new(kms_connection_config.key_access_token().clone());
-        self.kek_caches
+        self.kek_read_caches
             .get_or_create(key, cache_lifetime, || {
                 Ok(Arc::new(Mutex::new(Default::default())))
             })
@@ -93,7 +93,7 @@ impl KmsManager {
     fn clear_expired_entries(&self, cleanup_interval: Option<Duration>) {
         if let Some(cleanup_interval) = cleanup_interval {
             self.kms_client_cache.clear_expired(cleanup_interval);
-            self.kek_caches.clear_expired(cleanup_interval);
+            self.kek_read_caches.clear_expired(cleanup_interval);
             self.kek_write_caches.clear_expired(cleanup_interval);
         }
     }
