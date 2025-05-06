@@ -72,6 +72,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
       - name: Integration Test
         run: ./ci/run_integration_tests.sh
 
