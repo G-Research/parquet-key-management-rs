@@ -65,7 +65,7 @@ fn write_test_file(
     file_path: &Path,
     encryption_config: Option<EncryptionConfiguration>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let file = File::create(&file_path)?;
+    let file = File::create(file_path)?;
 
     let mut writer_properties_builder = WriterProperties::builder();
 
