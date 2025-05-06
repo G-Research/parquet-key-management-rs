@@ -118,3 +118,26 @@ jobs:
         if: env.RESULTS != 'success,success,success,success'
         run: false
         shell: bash
+
+  publish:
+    name: Publish release
+    #if: ${{ !github.event.repository.fork && startsWith(github.ref, 'refs/tags/v') }}
+    needs:
+      - all-jobs-succeeded
+    runs-on: ubuntu-latest
+    #environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate version
+        run: |
+          TAG_VERSION=${{ github.ref_name }}
+          CARGO_VERSION="v$(grep '^version = ' Cargo.toml | cut -d '"' -f 2)"
+          if [ "${TAG_VERSION}" != "${CARGO_VERSION}" ]; then
+            echo "Tag version (${TAG_VERSION}) does not match version from Cargo (${CARGO_VERSION})"
+            exit 1
+          fi
+      - name: Cargo publish
+        run: cargo publish --verbose --dry-run
+        working-directory: ./parquet-key-management
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
