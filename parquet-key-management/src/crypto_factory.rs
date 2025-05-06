@@ -653,8 +653,9 @@ mod tests {
         }
     }
 
+    /// Test caching of key encryption keys when decrypting files
     #[test]
-    fn test_key_encryption_key_caching() {
+    fn test_decryption_key_encryption_key_caching() {
         let time_controller = crate::kms_manager::mock_time::time_controller();
 
         let kms_config = Arc::new(KmsConnectionConfig::default());
@@ -733,6 +734,52 @@ mod tests {
             retrieve_key(&props1);
             assert_eq!(3, kms_factory.keys_unwrapped());
         }
+    }
+
+    /// Test caching of key encryption keys when encrypting files
+    #[test]
+    fn test_encryption_key_encryption_key_caching() {
+        let time_controller = crate::kms_manager::mock_time::time_controller();
+
+        let kms_config = Arc::new(KmsConnectionConfig::default());
+        let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
+            .set_double_wrapping(true)
+            .add_column_key("kc1".to_owned(), vec!["x0".to_owned(), "x1".to_owned()])
+            .add_column_key("kc2".to_owned(), vec!["x2".to_owned(), "x3".to_owned()])
+            .set_cache_lifetime(Some(Duration::from_secs(600)))
+            .build();
+
+        let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+        let crypto_factory = CryptoFactory::new(kms_factory.clone());
+
+        let generate_encryption_props = || {
+            let _ = crypto_factory
+                .file_encryption_properties(kms_config.clone(), &encryption_config)
+                .unwrap();
+        };
+
+        assert_eq!(0, kms_factory.keys_wrapped());
+
+        generate_encryption_props();
+        // 1 key wrapped per master key id
+        assert_eq!(3, kms_factory.keys_wrapped());
+
+        time_controller.advance(Duration::from_secs(599));
+        generate_encryption_props();
+        assert_eq!(3, kms_factory.keys_wrapped());
+
+        time_controller.advance(Duration::from_secs(1));
+        generate_encryption_props();
+        assert_eq!(6, kms_factory.keys_wrapped());
+
+        // Refreshing the access token should invalidate the KEK write cache
+        kms_config.refresh_key_access_token("new_secret".to_owned());
+        generate_encryption_props();
+        assert_eq!(9, kms_factory.keys_wrapped());
+
+        time_controller.advance(Duration::from_secs(599));
+        generate_encryption_props();
+        assert_eq!(9, kms_factory.keys_wrapped());
     }
 
     #[test]
