@@ -761,24 +761,28 @@ mod tests {
         assert_eq!(0, kms_factory.keys_wrapped());
 
         generate_encryption_props();
-        // 1 key wrapped per master key id
+        // We generate 1 KEK for each master key used and wrap it with the KMS
         assert_eq!(3, kms_factory.keys_wrapped());
 
         time_controller.advance(Duration::from_secs(599));
         generate_encryption_props();
+        // KEK cache hasn't yet expired, we reused it to generate new props
         assert_eq!(3, kms_factory.keys_wrapped());
 
         time_controller.advance(Duration::from_secs(1));
         generate_encryption_props();
+        // The KEK cache has now expired, so we generated 3 new KEKs and wrapped them with the KMS
         assert_eq!(6, kms_factory.keys_wrapped());
 
-        // Refreshing the access token should invalidate the KEK write cache
+        // Refreshing the access token should invalidate the KEK write cache,
+        // requiring us to again generate new KEKs and wrap them with the KMS
         kms_config.refresh_key_access_token("new_secret".to_owned());
         generate_encryption_props();
         assert_eq!(9, kms_factory.keys_wrapped());
 
         time_controller.advance(Duration::from_secs(599));
         generate_encryption_props();
+        // The KEK cache for the refreshed token is still valid, no new KEKs were generated
         assert_eq!(9, kms_factory.keys_wrapped());
     }
 
