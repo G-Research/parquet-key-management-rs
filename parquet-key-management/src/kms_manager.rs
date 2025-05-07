@@ -97,6 +97,15 @@ impl KmsManager {
             self.kek_write_caches.clear_expired(cleanup_interval);
         }
     }
+
+    #[cfg(test)]
+    pub fn cache_stats(&self) -> CacheStats {
+        CacheStats {
+            num_kms_clients: self.kms_client_cache.cache.lock().unwrap().len(),
+            num_kek_read_caches: self.kek_read_caches.cache.lock().unwrap().len(),
+            num_kek_write_caches: self.kek_write_caches.cache.lock().unwrap().len(),
+        }
+    }
 }
 
 struct ExpiringCache<TKey, TValue> {
@@ -210,6 +219,14 @@ impl KekCacheKey {
     pub fn new(key_access_token: String) -> Self {
         Self { key_access_token }
     }
+}
+
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct CacheStats {
+    pub num_kms_clients: usize,
+    pub num_kek_read_caches: usize,
+    pub num_kek_write_caches: usize,
 }
 
 #[cfg(not(test))]
