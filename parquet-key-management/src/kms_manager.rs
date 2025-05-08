@@ -6,14 +6,28 @@ use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// Cache of key encryption keys (KEKs), keyed by their base64 encoded key id
-pub(crate) type KekCache = Arc<Mutex<HashMap<String, Vec<u8>>>>;
+/// Cache of key encryption keys (KEKs) to use when decrypting files,
+/// keyed by their base64 encoded key id
+pub(crate) type KekReadCache = Arc<Mutex<HashMap<String, Vec<u8>>>>;
+
+// Key encryption key (KEK) struct with extra metadata required when encrypting files
+pub(crate) struct KeyEncryptionKey {
+    pub key_id: Vec<u8>,
+    pub encoded_key_id: String,
+    pub key: Vec<u8>,
+    pub wrapped_key: String,
+}
+
+/// Cache of key encryption keys (KEKs) used when encrypting files,
+/// keyed by the corresponding master key identifier.
+pub(crate) type KekWriteCache = Arc<Mutex<HashMap<String, KeyEncryptionKey>>>;
 
 /// Manages caching KMS clients and KEK caches
 pub(crate) struct KmsManager {
     kms_client_factory: Box<dyn KmsClientFactory>,
     kms_client_cache: ExpiringCache<ClientKey, KmsClientRef>,
-    kek_caches: ExpiringCache<KekCacheKey, KekCache>,
+    kek_read_caches: ExpiringCache<KekCacheKey, KekReadCache>,
+    kek_write_caches: ExpiringCache<KekCacheKey, KekWriteCache>,
 }
 
 impl KmsManager {
@@ -24,7 +38,8 @@ impl KmsManager {
         Self {
             kms_client_factory: Box::new(kms_client_factory),
             kms_client_cache: ExpiringCache::new(),
-            kek_caches: ExpiringCache::new(),
+            kek_read_caches: ExpiringCache::new(),
+            kek_write_caches: ExpiringCache::new(),
         }
     }
 
@@ -47,14 +62,28 @@ impl KmsManager {
             })
     }
 
-    pub fn get_kek_cache(
+    pub fn get_kek_read_cache(
         &self,
         kms_connection_config: &Arc<KmsConnectionConfig>,
         cache_lifetime: Option<Duration>,
-    ) -> KekCache {
+    ) -> KekReadCache {
         self.clear_expired_entries(cache_lifetime);
         let key = KekCacheKey::new(kms_connection_config.key_access_token().clone());
-        self.kek_caches
+        self.kek_read_caches
+            .get_or_create(key, cache_lifetime, || {
+                Ok(Arc::new(Mutex::new(Default::default())))
+            })
+            .unwrap()
+    }
+
+    pub fn get_kek_write_cache(
+        &self,
+        kms_connection_config: &Arc<KmsConnectionConfig>,
+        cache_lifetime: Option<Duration>,
+    ) -> KekWriteCache {
+        self.clear_expired_entries(cache_lifetime);
+        let key = KekCacheKey::new(kms_connection_config.key_access_token().clone());
+        self.kek_write_caches
             .get_or_create(key, cache_lifetime, || {
                 Ok(Arc::new(Mutex::new(Default::default())))
             })
@@ -64,7 +93,17 @@ impl KmsManager {
     fn clear_expired_entries(&self, cleanup_interval: Option<Duration>) {
         if let Some(cleanup_interval) = cleanup_interval {
             self.kms_client_cache.clear_expired(cleanup_interval);
-            self.kek_caches.clear_expired(cleanup_interval);
+            self.kek_read_caches.clear_expired(cleanup_interval);
+            self.kek_write_caches.clear_expired(cleanup_interval);
+        }
+    }
+
+    #[cfg(test)]
+    pub fn cache_stats(&self) -> CacheStats {
+        CacheStats {
+            num_kms_clients: self.kms_client_cache.cache.lock().unwrap().len(),
+            num_kek_read_caches: self.kek_read_caches.cache.lock().unwrap().len(),
+            num_kek_write_caches: self.kek_write_caches.cache.lock().unwrap().len(),
         }
     }
 }
@@ -180,6 +219,14 @@ impl KekCacheKey {
     pub fn new(key_access_token: String) -> Self {
         Self { key_access_token }
     }
+}
+
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct CacheStats {
+    pub num_kms_clients: usize,
+    pub num_kek_read_caches: usize,
+    pub num_kek_write_caches: usize,
 }
 
 #[cfg(not(test))]

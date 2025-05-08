@@ -349,6 +349,11 @@ impl CryptoFactory {
 
         Ok(EncryptionKey::new(key, key_metadata))
     }
+
+    #[cfg(test)]
+    pub(crate) fn cache_stats(&self) -> crate::kms_manager::CacheStats {
+        self.kms_manager.cache_stats()
+    }
 }
 
 struct EncryptionKey {
@@ -534,26 +539,32 @@ mod tests {
 
         do_key_retrieval();
         assert_eq!(1, kms_factory.invocations().len());
+        assert_eq!(1, crypto_factory.cache_stats().num_kms_clients);
 
         time_controller.advance(Duration::from_secs(599));
 
         do_key_retrieval();
         assert_eq!(1, kms_factory.invocations().len());
+        assert_eq!(1, crypto_factory.cache_stats().num_kms_clients);
 
         time_controller.advance(Duration::from_secs(1));
 
         do_key_retrieval();
         assert_eq!(2, kms_factory.invocations().len());
+        // The old KMS client is expired so has been removed from the cache
+        assert_eq!(1, crypto_factory.cache_stats().num_kms_clients);
 
         time_controller.advance(Duration::from_secs(599));
 
         do_key_retrieval();
         assert_eq!(2, kms_factory.invocations().len());
+        assert_eq!(1, crypto_factory.cache_stats().num_kms_clients);
 
         time_controller.advance(Duration::from_secs(1));
 
         do_key_retrieval();
         assert_eq!(3, kms_factory.invocations().len());
+        assert_eq!(1, crypto_factory.cache_stats().num_kms_clients);
     }
 
     #[test]
@@ -653,8 +664,9 @@ mod tests {
         }
     }
 
+    /// Test caching of key encryption keys when decrypting files
     #[test]
-    fn test_key_encryption_key_caching() {
+    fn test_decryption_key_encryption_key_caching() {
         let time_controller = crate::kms_manager::mock_time::time_controller();
 
         let kms_config = Arc::new(KmsConnectionConfig::default());
@@ -698,6 +710,7 @@ mod tests {
             time_controller.advance(Duration::from_secs(599));
             retrieve_key(&props);
             assert_eq!(1, kms_factory.keys_unwrapped());
+            assert_eq!(1, crypto_factory.cache_stats().num_kek_read_caches);
         }
         {
             let props = get_new_decryption_properties();
@@ -708,12 +721,15 @@ mod tests {
             // Cache lifetime has expired but the key unwrapper still holds the
             // key encryption key cache.
             assert_eq!(1, kms_factory.keys_unwrapped());
+            assert_eq!(1, crypto_factory.cache_stats().num_kek_read_caches);
         }
         {
             let props = get_new_decryption_properties();
             retrieve_key(&props);
             // Newly created decryption properties use a new key encryption key cache
             assert_eq!(2, kms_factory.keys_unwrapped());
+            // Old KEKs have been removed from the cache
+            assert_eq!(1, crypto_factory.cache_stats().num_kek_read_caches);
         }
         {
             time_controller.advance(Duration::from_secs(599));
@@ -721,6 +737,7 @@ mod tests {
             let props1 = get_new_decryption_properties();
             retrieve_key(&props1);
             assert_eq!(2, kms_factory.keys_unwrapped());
+            assert_eq!(1, crypto_factory.cache_stats().num_kek_read_caches);
 
             kms_config.refresh_key_access_token("new_secret".to_owned());
             // Creating decryption properties with a different access key should require
@@ -728,11 +745,70 @@ mod tests {
             let props2 = get_new_decryption_properties();
             retrieve_key(&props2);
             assert_eq!(3, kms_factory.keys_unwrapped());
+            // KEKs for old access token are still cached as they haven't expired
+            assert_eq!(2, crypto_factory.cache_stats().num_kek_read_caches);
 
             // But the cache used by older file encryption properties is still usable.
             retrieve_key(&props1);
             assert_eq!(3, kms_factory.keys_unwrapped());
         }
+    }
+
+    /// Test caching of key encryption keys when encrypting files
+    #[test]
+    fn test_encryption_key_encryption_key_caching() {
+        let time_controller = crate::kms_manager::mock_time::time_controller();
+
+        let kms_config = Arc::new(KmsConnectionConfig::default());
+        let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
+            .set_double_wrapping(true)
+            .add_column_key("kc1".to_owned(), vec!["x0".to_owned(), "x1".to_owned()])
+            .add_column_key("kc2".to_owned(), vec!["x2".to_owned(), "x3".to_owned()])
+            .set_cache_lifetime(Some(Duration::from_secs(600)))
+            .build();
+
+        let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+        let crypto_factory = CryptoFactory::new(kms_factory.clone());
+
+        let generate_encryption_props = || {
+            let _ = crypto_factory
+                .file_encryption_properties(kms_config.clone(), &encryption_config)
+                .unwrap();
+        };
+
+        assert_eq!(0, kms_factory.keys_wrapped());
+
+        generate_encryption_props();
+        // We generate 1 KEK for each master key used and wrap it with the KMS
+        assert_eq!(3, kms_factory.keys_wrapped());
+        assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
+
+        time_controller.advance(Duration::from_secs(599));
+        generate_encryption_props();
+        // KEK cache hasn't yet expired, we reused it to generate new props
+        assert_eq!(3, kms_factory.keys_wrapped());
+        assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
+
+        time_controller.advance(Duration::from_secs(1));
+        generate_encryption_props();
+        // The KEK cache has now expired, so we generated 3 new KEKs and wrapped them with the KMS
+        assert_eq!(6, kms_factory.keys_wrapped());
+        // Old KEKs have been removed from the cache
+        assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
+
+        // Refreshing the access token should invalidate the KEK write cache,
+        // requiring us to again generate new KEKs and wrap them with the KMS
+        kms_config.refresh_key_access_token("new_secret".to_owned());
+        generate_encryption_props();
+        assert_eq!(9, kms_factory.keys_wrapped());
+        // KEKs for old access token are still cached as they haven't expired
+        assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
+
+        time_controller.advance(Duration::from_secs(599));
+        generate_encryption_props();
+        // The KEK cache for the refreshed token is still valid, no new KEKs were generated
+        assert_eq!(9, kms_factory.keys_wrapped());
+        assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
     }
 
     #[test]

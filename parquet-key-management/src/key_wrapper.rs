@@ -2,13 +2,12 @@ use crate::crypto_factory::EncryptionConfiguration;
 use crate::key_encryption::encrypt_encryption_key;
 use crate::key_material::KeyMaterialBuilder;
 use crate::kms::KmsConnectionConfig;
-use crate::kms_manager::KmsManager;
+use crate::kms_manager::{KekWriteCache, KeyEncryptionKey, KmsManager};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use parquet::errors::Result;
 use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,7 +16,7 @@ pub(crate) struct KeyWrapper<'a> {
     kms_manager: &'a Arc<KmsManager>,
     kms_connection_config: Arc<KmsConnectionConfig>,
     encryption_configuration: &'a EncryptionConfiguration,
-    master_key_to_kek: HashMap<String, KeyEncryptionKey>,
+    master_key_to_kek: KekWriteCache,
 }
 
 impl<'a> KeyWrapper<'a> {
@@ -26,11 +25,15 @@ impl<'a> KeyWrapper<'a> {
         kms_connection_config: Arc<KmsConnectionConfig>,
         encryption_configuration: &'a EncryptionConfiguration,
     ) -> Self {
+        let master_key_to_kek = kms_manager.get_kek_write_cache(
+            &kms_connection_config,
+            encryption_configuration.cache_lifetime(),
+        );
         Self {
             kms_manager,
             kms_connection_config,
             encryption_configuration,
-            master_key_to_kek: Default::default(),
+            master_key_to_kek,
         }
     }
 
@@ -57,7 +60,8 @@ impl<'a> KeyWrapper<'a> {
         };
 
         let key_material = if self.encryption_configuration.double_wrapping() {
-            let kek = match self.master_key_to_kek.entry(master_key_id.to_owned()) {
+            let mut master_key_to_kek = self.master_key_to_kek.lock().unwrap();
+            let kek = match master_key_to_kek.entry(master_key_id.to_owned()) {
                 Entry::Occupied(kek) => kek.into_mut(),
                 Entry::Vacant(entry) => entry.insert(generate_key_encryption_key(
                     master_key_id,
@@ -120,11 +124,4 @@ fn generate_key_encryption_key(
         key,
         wrapped_key,
     })
-}
-
-struct KeyEncryptionKey {
-    key_id: Vec<u8>,
-    encoded_key_id: String,
-    key: Vec<u8>,
-    wrapped_key: String,
 }
