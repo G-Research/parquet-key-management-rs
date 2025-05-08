@@ -18,7 +18,8 @@ use tempfile::TempDir;
 fn uniform_encryption_single_wrapping() {
     let encryption_config = EncryptionConfiguration::builder("kf".into())
         .set_double_wrapping(false)
-        .build();
+        .build()
+        .unwrap();
     let decryption_config = DecryptionConfiguration::builder().build();
 
     round_trip_parquet(encryption_config, decryption_config).unwrap();
@@ -28,7 +29,8 @@ fn uniform_encryption_single_wrapping() {
 fn uniform_encryption_double_wrapping() {
     let encryption_config = EncryptionConfiguration::builder("kf".into())
         .set_double_wrapping(true)
-        .build();
+        .build()
+        .unwrap();
     let decryption_config = DecryptionConfiguration::builder().build();
 
     round_trip_parquet(encryption_config, decryption_config).unwrap();
@@ -40,7 +42,8 @@ fn per_column_encryption_single_wrapping() {
         .set_double_wrapping(false)
         .add_column_key("kc1".into(), vec!["x".into()])
         .add_column_key("kc2".into(), vec!["y".into(), "z".into()])
-        .build();
+        .build()
+        .unwrap();
     let decryption_config = DecryptionConfiguration::builder().build();
 
     round_trip_parquet(encryption_config, decryption_config).unwrap();
@@ -52,7 +55,8 @@ fn per_column_encryption_double_wrapping() {
         .set_double_wrapping(true)
         .add_column_key("kc1".into(), vec!["x".into()])
         .add_column_key("kc2".into(), vec!["y".into(), "z".into()])
-        .build();
+        .build()
+        .unwrap();
     let decryption_config = DecryptionConfiguration::builder().build();
 
     round_trip_parquet(encryption_config, decryption_config).unwrap();
@@ -90,7 +94,8 @@ fn multi_file_round_trip() {
         .add_column_key("kc1".into(), vec!["x".into()])
         .add_column_key("kc2".into(), vec!["y".into(), "z".into()])
         .set_cache_lifetime(None)
-        .build();
+        .build()
+        .unwrap();
 
     let write_client_factory = Arc::new(TestKmsClientFactory::with_default_keys());
     let read_client_factory = Arc::new(TestKmsClientFactory::with_default_keys());

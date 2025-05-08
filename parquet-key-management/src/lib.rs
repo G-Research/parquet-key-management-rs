@@ -70,7 +70,7 @@
 //! let encryption_config = EncryptionConfigurationBuilder::new("kf".into())
 //!     .add_column_key("kc1".into(), vec!["x".into()])
 //!     .add_column_key("kc2".into(), vec!["y".into()])
-//!     .build();
+//!     .build()?;
 //!
 //! // Use the CryptoFactory to generate file encryption properties using the configuration
 //! let encryption_properties =
