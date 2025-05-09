@@ -103,8 +103,32 @@ impl EncryptionConfigurationBuilder {
     }
 
     /// Finalizes the encryption configuration to be used
-    pub fn build(self) -> EncryptionConfiguration {
-        EncryptionConfiguration {
+    pub fn build(self) -> Result<EncryptionConfiguration> {
+        let mut seen_columns = HashMap::new();
+        for (master_key_id, columns) in self.column_key_ids.iter() {
+            for col_name in columns.iter() {
+                let prev_id = seen_columns.insert(col_name.clone(), master_key_id.clone());
+                match prev_id {
+                    Some(prev_id) if &prev_id == master_key_id => {
+                        return Err(ParquetError::General(format!(
+                            "Invalid encryption configuration. \
+                            Column '{col_name}' is repeated multiple times for master key id \
+                            '{master_key_id}'"
+                        )));
+                    }
+                    Some(prev_id) => {
+                        return Err(ParquetError::General(format!(
+                            "Invalid encryption configuration. \
+                            Column '{col_name}' is configured to use multiple master key ids: \
+                            '{master_key_id}' and '{prev_id}'"
+                        )));
+                    }
+                    None => {}
+                }
+            }
+        }
+
+        Ok(EncryptionConfiguration {
             footer_key_id: self.footer_key_id,
             column_key_ids: self.column_key_ids,
             plaintext_footer: self.plaintext_footer,
@@ -112,7 +136,7 @@ impl EncryptionConfigurationBuilder {
             cache_lifetime: self.cache_lifetime,
             internal_key_material: self.internal_key_material,
             data_key_length_bits: self.data_key_length_bits,
-        }
+        })
     }
 
     /// Specify a column master key identifier and the column names to be encrypted with this key.
@@ -230,7 +254,7 @@ impl Default for DecryptionConfigurationBuilder {
 /// # use parquet_key_management::kms::KmsConnectionConfig;
 /// # let crypto_factory: CryptoFactory = todo!();
 /// let kms_connection_config = Arc::new(KmsConnectionConfig::default());
-/// let encryption_config = EncryptionConfiguration::builder("master_key_id".into()).build();
+/// let encryption_config = EncryptionConfiguration::builder("master_key_id".into()).build()?;
 /// let encryption_properties = crypto_factory.file_encryption_properties(
 ///     kms_connection_config, &encryption_config)?;
 /// # Ok::<(), parquet::errors::ParquetError>(())
@@ -572,7 +596,8 @@ mod tests {
         let kms_config = Arc::new(KmsConnectionConfig::default());
         let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
             .set_double_wrapping(true)
-            .build();
+            .build()
+            .unwrap();
 
         let crypto_factory = CryptoFactory::new(TestKmsClientFactory::with_default_keys());
 
@@ -607,7 +632,8 @@ mod tests {
             .set_double_wrapping(double_wrapping)
             .add_column_key("kc1".to_owned(), vec!["x0".to_owned(), "x1".to_owned()])
             .add_column_key("kc2".to_owned(), vec!["x2".to_owned(), "x3".to_owned()])
-            .build();
+            .build()
+            .unwrap();
 
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
@@ -674,7 +700,8 @@ mod tests {
             .set_double_wrapping(true)
             .add_column_key("kc1".to_owned(), vec!["x0".to_owned(), "x1".to_owned()])
             .add_column_key("kc2".to_owned(), vec!["x2".to_owned(), "x3".to_owned()])
-            .build();
+            .build()
+            .unwrap();
 
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
@@ -765,7 +792,8 @@ mod tests {
             .add_column_key("kc1".to_owned(), vec!["x0".to_owned(), "x1".to_owned()])
             .add_column_key("kc2".to_owned(), vec!["x2".to_owned(), "x3".to_owned()])
             .set_cache_lifetime(Some(Duration::from_secs(600)))
-            .build();
+            .build()
+            .unwrap();
 
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
@@ -851,6 +879,33 @@ mod tests {
         assert_eq!(details.custom_kms_conf, expected_conf);
     }
 
+    #[test]
+    fn encryption_configuration_with_conflicting_column() {
+        let builder = EncryptionConfigurationBuilder::new("kf".to_owned())
+            .add_column_key("kc1".to_owned(), vec!["x0".to_owned(), "x1".to_owned()])
+            .add_column_key("kc2".to_owned(), vec!["x2".to_owned(), "x1".to_owned()]);
+
+        let build_result = builder.build();
+        assert!(build_result.is_err());
+        let error_message = build_result.unwrap_err().to_string();
+        assert!(error_message.contains("Invalid encryption configuration. Column 'x1' is configured to use multiple master key ids: "));
+        assert!(error_message.contains("'kc1'"));
+        assert!(error_message.contains("'kc2'"));
+    }
+
+    #[test]
+    fn encryption_configuration_with_repeated_column() {
+        let builder = EncryptionConfigurationBuilder::new("kf".to_owned()).add_column_key(
+            "kc1".to_owned(),
+            vec!["x0".to_owned(), "x1".to_owned(), "x1".to_owned()],
+        );
+
+        let build_result = builder.build();
+        assert!(build_result.is_err());
+        let error_message = build_result.unwrap_err().to_string();
+        assert!(error_message.contains("Invalid encryption configuration. Column 'x1' is repeated multiple times for master key id 'kc1'"));
+    }
+
     fn get_kms_connection_config_for_decryption(
         decryption_kms_config: KmsConnectionConfig,
     ) -> KmsConnectionConfigDetails {
@@ -865,7 +920,8 @@ mod tests {
 
         let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
             .set_double_wrapping(true)
-            .build();
+            .build()
+            .unwrap();
 
         let file_encryption_properties = {
             let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());

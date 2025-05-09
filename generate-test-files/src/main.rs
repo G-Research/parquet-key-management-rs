@@ -24,7 +24,7 @@ fn write_test_files(output_directory: &Path) -> Result<(), Box<dyn std::error::E
 
     let encryption_config = EncryptionConfiguration::builder("kf".into())
         .set_double_wrapping(false)
-        .build();
+        .build()?;
     write_test_file(
         &output_directory.join("uniform_single_wrapped.parquet"),
         Some(encryption_config),
@@ -32,7 +32,7 @@ fn write_test_files(output_directory: &Path) -> Result<(), Box<dyn std::error::E
 
     let encryption_config = EncryptionConfiguration::builder("kf".into())
         .set_double_wrapping(true)
-        .build();
+        .build()?;
     write_test_file(
         &output_directory.join("uniform_double_wrapped.parquet"),
         Some(encryption_config),
@@ -42,7 +42,7 @@ fn write_test_files(output_directory: &Path) -> Result<(), Box<dyn std::error::E
         .set_double_wrapping(false)
         .add_column_key("kc1".into(), vec!["x".into()])
         .add_column_key("kc2".into(), vec!["y".into(), "z".into()])
-        .build();
+        .build()?;
     write_test_file(
         &output_directory.join("per_column_single_wrapped.parquet"),
         Some(encryption_config),
@@ -52,7 +52,7 @@ fn write_test_files(output_directory: &Path) -> Result<(), Box<dyn std::error::E
         .set_double_wrapping(true)
         .add_column_key("kc1".into(), vec!["x".into()])
         .add_column_key("kc2".into(), vec!["y".into(), "z".into()])
-        .build();
+        .build()?;
     write_test_file(
         &output_directory.join("per_column_double_wrapped.parquet"),
         Some(encryption_config),
