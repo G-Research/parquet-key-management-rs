@@ -17,6 +17,6 @@ edition = "2021"
 rust-version = "1.81"
 
 [workspace.dependencies]
-arrow = { version = ">=55.0.0", default-features = false }
-arrow-array = { version = ">=55.0.0", default-features = false }
-parquet = { version = ">=55.0.0", default-features = false, features = ["encryption"] }
+arrow = { version = "=55.0", default-features = false }
+arrow-array = { version = "=55.0", default-features = false }
+parquet = { version = "=55.0", default-features = false, features = ["encryption"] }
