@@ -34,3 +34,7 @@ required-features = ["_test_utils"]
 [[test]]
 name = "integration_tests"
 required-features = ["_test_utils"]
+
+[[test]]
+name = "key_material"
+required-features = ["_test_utils"]
