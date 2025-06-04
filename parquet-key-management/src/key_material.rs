@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Serializable key material that describes a wrapped encryption key
 /// and includes metadata required to unwrap it.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub(crate) struct KeyMaterial {
+pub struct KeyMaterial {
     /// The type of the key material.
     /// Currently only one type is supported: "PKMT1"
     #[serde(rename = "keyMaterialType")]

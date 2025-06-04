@@ -9,7 +9,7 @@ rust-version = { workspace = true }
 publish = false
 
 [dependencies]
-parquet-key-management = { version = "0.1.0", path = "../parquet-key-management", features = ["_test_utils"] }
+parquet-key-management = { path = "../parquet-key-management", features = ["_test_utils"] }
 arrow = { workspace = true }
 arrow-array = { workspace = true }
 parquet = { workspace = true, features = ["arrow", "snap"] }
