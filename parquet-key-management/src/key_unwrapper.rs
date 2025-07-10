@@ -68,8 +68,7 @@ impl KeyUnwrapper {
         };
         let decoded_kek_id = BASE64_STANDARD.decode(kek_id).map_err(|e| {
             ParquetError::General(format!(
-                "Could not base64 decode key encryption key id: {}",
-                e
+                "Could not base64 decode key encryption key id: {e}"
             ))
         })?;
         key_encryption::decrypt_encryption_key(wrapped_dek, &decoded_kek_id, kek)
