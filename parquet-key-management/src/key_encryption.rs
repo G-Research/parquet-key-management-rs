@@ -42,9 +42,7 @@ pub(crate) fn decrypt_encryption_key(
     kek_bytes: &[u8],
 ) -> Result<Vec<u8>> {
     let encrypted_key = BASE64_STANDARD.decode(wrapped_key).map_err(|e| {
-        ParquetError::General(format!(
-            "Could not base64 decode data encryption key: {e}"
-        ))
+        ParquetError::General(format!("Could not base64 decode data encryption key: {e}"))
     })?;
 
     let algorithm = &AES_128_GCM;
