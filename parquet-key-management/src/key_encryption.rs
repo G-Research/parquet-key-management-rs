@@ -15,8 +15,7 @@ pub(crate) fn encrypt_encryption_key(
     let algorithm = &AES_128_GCM;
     let kek = UnboundKey::new(algorithm, kek_bytes).map_err(|e| {
         ParquetError::General(format!(
-            "Error creating AES key from key encryption key bytes: {}",
-            e
+            "Error creating AES key from key encryption key bytes: {e}"
         ))
     })?;
     let kek = LessSafeKey::new(kek);
@@ -44,16 +43,14 @@ pub(crate) fn decrypt_encryption_key(
 ) -> Result<Vec<u8>> {
     let encrypted_key = BASE64_STANDARD.decode(wrapped_key).map_err(|e| {
         ParquetError::General(format!(
-            "Could not base64 decode data encryption key: {}",
-            e
+            "Could not base64 decode data encryption key: {e}"
         ))
     })?;
 
     let algorithm = &AES_128_GCM;
     let kek = UnboundKey::new(algorithm, kek_bytes).map_err(|e| {
         ParquetError::General(format!(
-            "Error creating AES key from key encryption key bytes: {}",
-            e
+            "Error creating AES key from key encryption key bytes: {e}"
         ))
     })?;
     let kek = LessSafeKey::new(kek);
