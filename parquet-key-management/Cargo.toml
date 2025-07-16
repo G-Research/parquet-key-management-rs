@@ -21,7 +21,7 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 arrow = { workspace = true }
 arrow-array = { workspace = true }
 parquet = { workspace = true, features = ["arrow"] }
-tempfile = { version = "3.0", default-features = false }
+tempfile = { workspace = true }
 
 [features]
 default = []

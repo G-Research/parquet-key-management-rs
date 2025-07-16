@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Configuration for encrypting a Parquet file using a KMS
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct EncryptionConfiguration {
     footer_key_id: String,
     column_key_ids: HashMap<String, Vec<String>>,
@@ -176,7 +176,7 @@ impl EncryptionConfigurationBuilder {
 }
 
 /// Configuration for decrypting a Parquet file using a KMS
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct DecryptionConfiguration {
     cache_lifetime: Option<Duration>,
 }

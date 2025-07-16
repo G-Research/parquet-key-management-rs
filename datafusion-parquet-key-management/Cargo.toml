@@ -1,0 +1,24 @@
+[package]
+name = "datafusion-parquet-key-management"
+description = "Integrates the Parquet Key Management Tools API with DataFusion"
+keywords = ["parquet", "encryption", "kms", "datafusion"]
+version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+readme = "README.md"
+license = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+parquet-key-management = { workspace = true }
+datafusion-execution = { git = "https://github.com/adamreeve/datafusion.git", branch = "encryption_factory", default-features = false, features = ["parquet_encryption"] }
+datafusion-common = { git = "https://github.com/adamreeve/datafusion.git", branch = "encryption_factory", default-features = false, features = ["parquet", "parquet_encryption"] }
+object_store = { version = "0.12.2", default-features = false }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+parquet-key-management = { workspace = true, features = ["_test_utils"] }
+datafusion = { git = "https://github.com/adamreeve/datafusion.git", branch = "encryption_factory", default-features = false, features = ["parquet", "parquet_encryption"] }
+tokio = { version = "1.46", features = ["macros", "rt", "sync"] }
+futures = { version = "0.3" }
