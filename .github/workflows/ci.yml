@@ -88,6 +88,8 @@ jobs:
             ~/.cargo
           key: cargo-cache-msrv-${{ hashFiles('Cargo.toml') }}
           restore-keys: cargo-cache-msrv-
+      - name: Write Cargo.lock
+        run: cp Cargo.lock.msrv Cargo.lock
       - name: Install cargo-msrv
         run: cargo install cargo-msrv
       - name: Verify MSRV
