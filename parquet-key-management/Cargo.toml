@@ -16,15 +16,22 @@ parquet = { workspace = true }
 ring = { version = "0.17", default-features = false, features = ["std"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
+datafusion-execution = { git = "https://github.com/adamreeve/datafusion.git", branch = "encryption_factory", default-features = false, features = ["parquet_encryption"], optional = true }
+datafusion-common = { git = "https://github.com/adamreeve/datafusion.git", branch = "encryption_factory", default-features = false, features = ["parquet", "parquet_encryption"], optional = true }
+object_store = { version = "0.12.2", default-features = false, optional = true }
 
 [dev-dependencies]
 arrow = { workspace = true }
 arrow-array = { workspace = true }
+datafusion = { git = "https://github.com/adamreeve/datafusion.git", branch = "encryption_factory", default-features = false, features = ["parquet", "parquet_encryption"] }
 parquet = { workspace = true, features = ["arrow"] }
 tempfile = { workspace = true }
+tokio = { version = "1.46", features = ["macros", "rt", "sync"] }
+futures = { version = "0.3" }
 
 [features]
 default = []
+datafusion = ["dep:datafusion-execution", "dep:datafusion-common", "dep:object_store"]
 _test_utils = []
 
 [[test]]
@@ -38,3 +45,7 @@ required-features = ["_test_utils"]
 [[test]]
 name = "key_material"
 required-features = ["_test_utils"]
+
+[[test]]
+name = "datafusion_round_trip"
+required-features = ["_test_utils", "datafusion"]

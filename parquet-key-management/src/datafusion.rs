@@ -1,17 +1,16 @@
 //! Parquet Encryption Key Management Tools for DataFusion
 //!
-//! This library provides a DataFusion `EncryptionFactory` implementation based on the
-//! Key Management Tools API, to enable integration with a KMS.
+//! This module provides a DataFusion `EncryptionFactory` implementation based on the
+//! Key Management Tools API, to enable integration with a KMS when reading and writing
+//! encrypted Parquet with DataFusion.
 
+use crate::crypto_factory::{CryptoFactory, DecryptionConfiguration, EncryptionConfiguration};
+use crate::kms::KmsConnectionConfig;
 use datafusion_common::arrow::datatypes::SchemaRef;
 use datafusion_common::config::{ConfigEntry, EncryptionFactoryOptions, ExtensionOptions};
 use datafusion_common::encryption::{FileDecryptionProperties, FileEncryptionProperties};
 use datafusion_common::{extensions_options, DataFusionError};
 use datafusion_execution::parquet_encryption::EncryptionFactory;
-use parquet_key_management::crypto_factory::{
-    CryptoFactory, DecryptionConfiguration, EncryptionConfiguration,
-};
-use parquet_key_management::kms::KmsConnectionConfig;
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;

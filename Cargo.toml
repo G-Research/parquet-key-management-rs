@@ -2,7 +2,6 @@
 
 members = [
     "parquet-key-management",
-    "datafusion-parquet-key-management",
     "generate-test-files",
 ]
 
@@ -18,7 +17,6 @@ edition = "2021"
 rust-version = "1.81"
 
 [workspace.dependencies]
-parquet-key-management = { path = "./parquet-key-management" }
 arrow = { version = ">=55.2", default-features = false }
 arrow-array = { version = ">=55.2", default-features = false }
 parquet = { version = ">=55.2", default-features = false, features = ["encryption"] }

@@ -6,11 +6,11 @@ use datafusion::parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderO
 use datafusion::parquet::file::column_crypto_metadata::ColumnCryptoMetaData;
 use datafusion::prelude::SessionContext;
 use datafusion_common::config::TableParquetOptions;
-use datafusion_parquet_key_management::{KmsEncryptionFactory, KmsEncryptionFactoryOptions};
 use futures::StreamExt;
 use parquet_key_management::crypto_factory::{
     CryptoFactory, DecryptionConfiguration, EncryptionConfiguration,
 };
+use parquet_key_management::datafusion::{KmsEncryptionFactory, KmsEncryptionFactoryOptions};
 use parquet_key_management::kms::KmsConnectionConfig;
 use parquet_key_management::test_kms::TestKmsClientFactory;
 use std::fs::File;
