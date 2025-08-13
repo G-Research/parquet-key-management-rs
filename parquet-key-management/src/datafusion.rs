@@ -1,6 +1,6 @@
-//! Parquet Encryption Key Management Tools for DataFusion
+//! Parquet Key Management Tools for DataFusion
 //!
-//! This module provides a DataFusion `EncryptionFactory` implementation based on the
+//! This module provides a DataFusion [`EncryptionFactory`] implementation based on the
 //! Key Management Tools API, to enable integration with a KMS when reading and writing
 //! encrypted Parquet with DataFusion.
 
@@ -16,14 +16,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Encryption factory for DataFusion that uses a `CryptoFactory` to integrate with a KMS
+/// Encryption factory for DataFusion that uses a `CryptoFactory` to integrate with a KMS.
 pub struct KmsEncryptionFactory {
     crypto_factory: CryptoFactory,
     kms_connection_config: Arc<KmsConnectionConfig>,
 }
 
 impl KmsEncryptionFactory {
-    /// Create a new `KmsEncryptionFactory` with the provided `CryptoFactory` and connection configuration
+    /// Create a new [`KmsEncryptionFactory`] with the provided [`CryptoFactory`] and [`KmsConnectionConfig`].
     pub fn new(
         crypto_factory: CryptoFactory,
         kms_connection_config: Arc<KmsConnectionConfig>,
@@ -69,7 +69,8 @@ impl std::fmt::Debug for KmsEncryptionFactory {
     }
 }
 
-/// Configuration options used to encrypt and decrypt files in a specific table
+/// DataFusion compatible options used to configure generation of encryption and decryption
+/// properties for a Table when using a [`KmsEncryptionFactory`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct KmsEncryptionFactoryOptions {
     /// The configuration to use when writing encrypted Parquet
@@ -79,6 +80,7 @@ pub struct KmsEncryptionFactoryOptions {
 }
 
 impl KmsEncryptionFactoryOptions {
+    /// Create a new [`KmsEncryptionFactoryOptions `] from encryption and decryption configurations
     pub fn new(
         encryption_config: EncryptionConfiguration,
         decryption_config: DecryptionConfiguration,
@@ -91,6 +93,7 @@ impl KmsEncryptionFactoryOptions {
 }
 
 extensions_options! {
+    /// DataFusion compatible configuration options related to file encryption
     pub struct EncryptionOptions {
         /// Master key identifier for footer key encryption
         pub footer_key_id: String, default = "".to_owned()
@@ -111,13 +114,14 @@ extensions_options! {
 }
 
 extensions_options! {
+    /// DataFusion compatible configuration options related to file decryption
     pub struct DecryptionOptions {
         /// How long in seconds to cache objects used during decryption
         pub cache_lifetime_s: Option<u64>, default = None
     }
 }
 
-// Have to manually implement PartialEq as using #[derive] isn't compatible with extensions_options macro
+// Manually implement PartialEq as using #[derive] isn't compatible with extensions_options macro
 impl PartialEq for EncryptionOptions {
     fn eq(&self, other: &Self) -> bool {
         self.footer_key_id == other.footer_key_id
@@ -193,7 +197,7 @@ impl From<EncryptionConfiguration> for EncryptionOptions {
 }
 
 impl TryInto<EncryptionConfiguration> for EncryptionOptions {
-    type Error = datafusion_common::DataFusionError;
+    type Error = DataFusionError;
 
     fn try_into(self) -> Result<EncryptionConfiguration, Self::Error> {
         let mut builder = EncryptionConfiguration::builder(self.footer_key_id.clone())
@@ -343,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_build_config_through_factory_options() {
+    fn round_trip_built_config_through_factory_options() {
         let encryption_config = EncryptionConfiguration::builder("kf".to_owned())
             .add_column_key("kc1".to_owned(), vec!["x0".to_owned(), "x1".to_owned()])
             .set_cache_lifetime(Some(Duration::from_secs(300)))
