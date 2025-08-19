@@ -29,7 +29,8 @@ async fn write_and_read_datafusion_table() {
         crypto_factory,
         kms_connection_config,
     ));
-    ctx.register_parquet_encryption_factory(ENCRYPTION_FACTORY_ID, encryption_factory);
+    ctx.runtime_env()
+        .register_parquet_encryption_factory(ENCRYPTION_FACTORY_ID, encryption_factory);
 
     // Register some simple test data
     let a: ArrayRef = Arc::new(StringArray::from(vec!["a", "b", "c", "a", "b", "c"]));

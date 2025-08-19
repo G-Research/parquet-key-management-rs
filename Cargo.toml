@@ -14,10 +14,10 @@ repository = "https://github.com/G-Research/parquet-key-management-rs"
 readme = "README.md"
 license = "Apache-2.0"
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.84"
 
 [workspace.dependencies]
-arrow = { version = ">=55.2", default-features = false }
-arrow-array = { version = ">=55.2", default-features = false }
-parquet = { version = ">=55.2", default-features = false, features = ["encryption"] }
+arrow = { version = ">=56.0", default-features = false }
+arrow-array = { version = ">=56.0", default-features = false }
+parquet = { version = ">=56.0", default-features = false, features = ["encryption"] }
 tempfile = { version = "3.0", default-features = false }
