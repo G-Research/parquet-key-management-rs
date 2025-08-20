@@ -19,3 +19,9 @@ the [`KmsClient`](https://docs.rs/parquet-key-management/latest/parquet_key_mana
 
 Please see the [API documentation](https://docs.rs/parquet-key-management/latest/parquet_key_management/)
 for examples of how to use this library and the full API reference.
+
+## Feature Flags
+
+The `parquet_key_management` crate provides the following features which may be enabled in your `Cargo.toml`:
+
+- `datafusion` - enables the `datafusion` module, which implements integration with [Apache DataFusion](https://datafusion.apache.org/)

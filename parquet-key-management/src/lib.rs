@@ -193,6 +193,8 @@
 //! ```
 
 pub mod crypto_factory;
+#[cfg(feature = "datafusion")]
+pub mod datafusion;
 mod key_encryption;
 pub mod key_material;
 mod key_unwrapper;
