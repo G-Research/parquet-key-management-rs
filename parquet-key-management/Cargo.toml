@@ -11,19 +11,20 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+async-trait = { version = "0.1" }
 base64 = { version = "0.22", default-features = false, features = ["std"] }
 parquet = { workspace = true }
 ring = { version = "0.17", default-features = false, features = ["std"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
-datafusion-execution = { git = "https://github.com/apache/datafusion.git", branch = "main", default-features = false, features = ["parquet_encryption"], optional = true }
-datafusion-common = { git = "https://github.com/apache/datafusion.git", branch = "main", default-features = false, features = ["parquet", "parquet_encryption"], optional = true }
+datafusion-execution = { version = "50.0", default-features = false, features = ["parquet_encryption"], optional = true }
+datafusion-common = { version = "50.0", default-features = false, features = ["parquet", "parquet_encryption"], optional = true }
 object_store = { version = "0.12.2", default-features = false, optional = true }
 
 [dev-dependencies]
 arrow = { workspace = true }
 arrow-array = { workspace = true }
-datafusion = { git = "https://github.com/apache/datafusion.git", branch = "main", default-features = false, features = ["parquet", "parquet_encryption"] }
+datafusion = { version = "50.0", default-features = false, features = ["parquet", "parquet_encryption"] }
 parquet = { workspace = true, features = ["arrow"] }
 tempfile = { workspace = true }
 tokio = { version = "1.46", features = ["macros", "rt", "sync"] }

@@ -35,8 +35,9 @@ impl KmsEncryptionFactory {
     }
 }
 
+#[async_trait::async_trait]
 impl EncryptionFactory for KmsEncryptionFactory {
-    fn get_file_encryption_properties(
+    async fn get_file_encryption_properties(
         &self,
         config: &EncryptionFactoryOptions,
         _schema: &SchemaRef,
@@ -49,7 +50,7 @@ impl EncryptionFactory for KmsEncryptionFactory {
         )?))
     }
 
-    fn get_file_decryption_properties(
+    async fn get_file_decryption_properties(
         &self,
         config: &EncryptionFactoryOptions,
         _file_path: &object_store::path::Path,
