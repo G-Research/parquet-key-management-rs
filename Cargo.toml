@@ -1,9 +1,6 @@
 [workspace]
 
-members = [
-    "parquet-key-management",
-    "generate-test-files",
-]
+members = ["parquet-key-management", "generate-test-files"]
 
 resolver = "2"
 
@@ -17,7 +14,9 @@ edition = "2021"
 rust-version = "1.86.0"
 
 [workspace.dependencies]
-arrow = { version = ">=56.0", default-features = false }
-arrow-array = { version = ">=56.0", default-features = false }
-parquet = { version = ">=56.0", default-features = false, features = ["encryption"] }
+arrow = { git = "https://github.com/G-Research/arrow-rs.git", branch = "56.2.0-async-keyretriever", default-features = false }
+arrow-array = { git = "https://github.com/G-Research/arrow-rs.git", branch = "56.2.0-async-keyretriever", default-features = false }
+parquet = { git = "https://github.com/G-Research/arrow-rs.git", branch = "56.2.0-async-keyretriever", default-features = false, features = [
+    "encryption",
+] }
 tempfile = { version = "3.0", default-features = false }

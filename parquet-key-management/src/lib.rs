@@ -9,6 +9,7 @@
 //! Double wrapping is used by default, where the DEKs are first encrypted with key encryption
 //! keys (KEKs) that are then encrypted with MEKs, to reduce KMS interactions.
 //!
+//! # Usage
 //! Using this module requires defining your own type that implements the
 //! [`KmsClient`](kms::KmsClient) trait and interacts with your organization's KMS.
 //!
@@ -18,6 +19,13 @@
 //! for writing encrypted Parquet files and
 //! [`FileDecryptionProperties`](parquet::encryption::decrypt::FileDecryptionProperties)
 //! for reading files.
+//!
+//! # `async` usage (`async` feature)
+//!
+//! This module also provides an asynchronous version of the [`KmsClient`](async_kms::KmsClient)
+//! trait and [`CryptoFactory`](async_crypto_factory::CryptoFactory) type that can be used
+//! with the [`async_reader`](parquet::arrow::async_reader) and
+//! [`async_writer`](parquet::arrow::async_writer) modules. See example on [`async_crypto_factory`].
 //!
 //! The encryption key metadata that is stored in the Parquet file is compatible with other Parquet
 //! implementations (PyArrow and parquet-java for example), so that files encrypted with this
@@ -31,12 +39,11 @@
 //! use base64::Engine;
 //! use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderBuilder};
 //! use parquet::arrow::ArrowWriter;
-//! use parquet_key_management::crypto_factory::{
-//!     CryptoFactory, DecryptionConfiguration, EncryptionConfigurationBuilder,
-//! };
-//! use parquet_key_management::kms::{KmsClient, KmsConnectionConfig};
 //! use parquet::errors::{ParquetError, Result};
 //! use parquet::file::properties::WriterProperties;
+//! use parquet_key_management::config::{DecryptionConfiguration, EncryptionConfigurationBuilder};
+//! use parquet_key_management::crypto_factory::CryptoFactory;
+//! use parquet_key_management::kms::{KmsClient, KmsClientRef, KmsConnectionConfig};
 //! use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
 //! use ring::rand::{SecureRandom, SystemRandom};
 //! use std::collections::HashMap;
@@ -124,7 +131,7 @@
 //! }
 //!
 //! impl DemoKmsClient {
-//!     pub fn create(_config: &KmsConnectionConfig) -> Result<Arc<dyn KmsClient>> {
+//!     pub fn create(_config: &KmsConnectionConfig) -> Result<KmsClientRef> {
 //!         let mut key_map = HashMap::default();
 //!         key_map.insert("kf".into(), "0123456789012345".into());
 //!         key_map.insert("kc1".into(), "1234567890123450".into());
@@ -192,15 +199,14 @@
 //! # Ok::<(), parquet::errors::ParquetError>(())
 //! ```
 
+#[cfg(feature = "async")]
+pub mod async_crypto_factory;
+#[cfg(feature = "async")]
+pub mod async_kms;
+pub mod config;
 pub mod crypto_factory;
 #[cfg(feature = "datafusion")]
 pub mod datafusion;
 mod key_encryption;
 pub mod key_material;
-mod key_unwrapper;
-mod key_wrapper;
 pub mod kms;
-mod kms_manager;
-#[cfg(any(test, feature = "_test_utils"))]
-#[doc(hidden)]
-pub mod test_kms;
