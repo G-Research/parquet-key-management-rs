@@ -3,9 +3,10 @@
 use arrow_array::{ArrayRef, Float32Array, Int32Array, RecordBatch};
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
-use parquet_key_management::crypto_factory::{CryptoFactory, EncryptionConfiguration};
+use parquet_key_management::config::EncryptionConfiguration;
+use parquet_key_management::crypto_factory::CryptoFactory;
+use parquet_key_management::kms::test::TestKmsClientFactory;
 use parquet_key_management::kms::KmsConnectionConfig;
-use parquet_key_management::test_kms::TestKmsClientFactory;
 use std::env;
 use std::fs::File;
 use std::path::Path;

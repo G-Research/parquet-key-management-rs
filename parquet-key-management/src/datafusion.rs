@@ -4,8 +4,9 @@
 //! Key Management Tools API, to enable integration with a KMS when reading and writing
 //! encrypted Parquet with DataFusion.
 
-use crate::crypto_factory::{CryptoFactory, DecryptionConfiguration, EncryptionConfiguration};
-use crate::kms::KmsConnectionConfig;
+use crate::async_crypto_factory::CryptoFactory;
+use crate::async_kms::KmsConnectionConfig;
+use crate::config::{DecryptionConfiguration, EncryptionConfiguration};
 use datafusion_common::arrow::datatypes::SchemaRef;
 use datafusion_common::config::{ConfigEntry, EncryptionFactoryOptions, ExtensionOptions};
 use datafusion_common::encryption::{FileDecryptionProperties, FileEncryptionProperties};
@@ -44,10 +45,14 @@ impl EncryptionFactory for KmsEncryptionFactory {
         _file_path: &object_store::path::Path,
     ) -> datafusion_common::Result<Option<FileEncryptionProperties>> {
         let encryption_configuration = build_encryption_configuration(config)?;
-        Ok(Some(self.crypto_factory.file_encryption_properties(
-            Arc::clone(&self.kms_connection_config),
-            &encryption_configuration,
-        )?))
+        Ok(Some(
+            self.crypto_factory
+                .file_encryption_properties(
+                    Arc::clone(&self.kms_connection_config),
+                    &encryption_configuration,
+                )
+                .await?,
+        ))
     }
 
     async fn get_file_decryption_properties(
@@ -56,10 +61,14 @@ impl EncryptionFactory for KmsEncryptionFactory {
         _file_path: &object_store::path::Path,
     ) -> datafusion_common::Result<Option<FileDecryptionProperties>> {
         let decryption_configuration = build_decryption_configuration(config)?;
-        Ok(Some(self.crypto_factory.file_decryption_properties(
-            Arc::clone(&self.kms_connection_config),
-            decryption_configuration,
-        )?))
+        Ok(Some(
+            self.crypto_factory
+                .file_decryption_properties(
+                    Arc::clone(&self.kms_connection_config),
+                    decryption_configuration,
+                )
+                .await?,
+        ))
     }
 }
 

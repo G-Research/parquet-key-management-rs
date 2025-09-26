@@ -1,5 +1,12 @@
 //! Types for integrating with a Key Management Server to use with Parquet Modular Encryption
 
+pub(crate) mod key_unwrapper;
+pub(crate) mod key_wrapper;
+pub(crate) mod kms_manager;
+#[cfg(any(test, feature = "_test_utils"))]
+#[doc(hidden)]
+pub mod test;
+
 use parquet::errors::Result;
 use std::collections::HashMap;
 use std::ops::Deref;

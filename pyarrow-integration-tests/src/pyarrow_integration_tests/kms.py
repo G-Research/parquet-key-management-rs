@@ -8,7 +8,7 @@ from Crypto.Random import get_random_bytes
 class ExampleKmsClient(pe.KmsClient):
     """
     Test KMS client implementation that is compatible with
-    parquet_key_management::test_kms::TestKmsClient
+    parquet_key_management::kms::test::TestKmsClient
     """
     def __init__(self, _kms_connection_configuration):
       pe.KmsClient.__init__(self)

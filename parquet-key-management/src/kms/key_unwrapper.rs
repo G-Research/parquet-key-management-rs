@@ -1,8 +1,8 @@
-use crate::crypto_factory::DecryptionConfiguration;
+use crate::config::DecryptionConfiguration;
 use crate::key_encryption;
 use crate::key_material::KeyMaterial;
+use crate::kms::kms_manager::{KekReadCache, KmsManager};
 use crate::kms::KmsConnectionConfig;
-use crate::kms_manager::{KekReadCache, KmsManager};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use parquet::encryption::decrypt::KeyRetriever;

@@ -7,15 +7,14 @@ use datafusion::parquet::file::column_crypto_metadata::ColumnCryptoMetaData;
 use datafusion::prelude::SessionContext;
 use datafusion_common::config::TableParquetOptions;
 use futures::StreamExt;
-use parquet_key_management::crypto_factory::{
-    CryptoFactory, DecryptionConfiguration, EncryptionConfiguration,
-};
+use parquet_key_management::async_crypto_factory::CryptoFactory;
+use parquet_key_management::async_kms::test::TestKmsClientFactory;
+use parquet_key_management::async_kms::KmsConnectionConfig;
+use parquet_key_management::config::{DecryptionConfiguration, EncryptionConfiguration};
 use parquet_key_management::datafusion::{KmsEncryptionFactory, KmsEncryptionFactoryOptions};
-use parquet_key_management::kms::KmsConnectionConfig;
-use parquet_key_management::test_kms::TestKmsClientFactory;
-use std::fs::File;
 use std::sync::Arc;
 use tempfile::TempDir;
+use tokio::fs::File;
 
 const ENCRYPTION_FACTORY_ID: &str = "example.memory_kms_encryption";
 
@@ -57,7 +56,7 @@ async fn write_and_read_datafusion_table() {
     read_encrypted(&ctx, &table_path, &kms_options)
         .await
         .unwrap();
-    verify_encryption(&table_path).unwrap();
+    verify_encryption(&table_path).await.unwrap();
 }
 
 async fn write_encrypted(
@@ -119,17 +118,18 @@ async fn read_encrypted(
     Ok(())
 }
 
-fn verify_encryption(table_path: &str) -> datafusion::common::Result<()> {
+async fn verify_encryption(table_path: &str) -> datafusion::common::Result<()> {
     let crypto_factory = CryptoFactory::new(TestKmsClientFactory::with_default_keys());
     let mut dirs = vec![std::path::PathBuf::from(table_path)];
     let mut files_visited = 0;
     while let Some(dir) = dirs.pop() {
-        for entry in std::fs::read_dir(&dir)? {
-            let path = entry?.path();
+        let mut entries = tokio::fs::read_dir(&dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
             if path.is_dir() {
                 dirs.push(path);
             } else if path.extension().is_some_and(|e| e == "parquet") {
-                verify_parquet_file(&path, &crypto_factory)?;
+                verify_parquet_file(&path, &crypto_factory).await?;
                 files_visited += 1;
             }
         }
@@ -138,19 +138,20 @@ fn verify_encryption(table_path: &str) -> datafusion::common::Result<()> {
     Ok(())
 }
 
-fn verify_parquet_file(
+async fn verify_parquet_file(
     file_path: &std::path::Path,
     crypto_factory: &CryptoFactory,
 ) -> datafusion::common::Result<()> {
     let kms_config = Arc::new(KmsConnectionConfig::default());
     let decryption_config = DecryptionConfiguration::builder().build();
-    let decryption_properties =
-        crypto_factory.file_decryption_properties(kms_config, decryption_config)?;
+    let decryption_properties = crypto_factory
+        .file_decryption_properties(kms_config, decryption_config)
+        .await?;
 
     let reader_options =
         ArrowReaderOptions::new().with_file_decryption_properties(decryption_properties);
-    let file = File::open(file_path)?;
-    let reader_metadata = ArrowReaderMetadata::load(&file, reader_options)?;
+    let mut file = File::open(file_path).await?;
+    let reader_metadata = ArrowReaderMetadata::load_async(&mut file, reader_options).await?;
     let metadata = reader_metadata.metadata();
     assert!(metadata.num_row_groups() > 0);
     for row_group in metadata.row_groups() {

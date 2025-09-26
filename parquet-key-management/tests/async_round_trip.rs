@@ -1,68 +1,20 @@
 use arrow_array::{ArrayRef, Float32Array, Int32Array, RecordBatch};
-use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderBuilder};
-use parquet::arrow::ArrowWriter;
+use futures::TryStreamExt;
+use parquet::arrow::arrow_reader::ArrowReaderOptions;
+use parquet::arrow::{AsyncArrowWriter, ParquetRecordBatchStreamBuilder};
 use parquet::encryption::decrypt::FileDecryptionProperties;
 use parquet::encryption::encrypt::FileEncryptionProperties;
 use parquet::errors::Result;
 use parquet::file::properties::WriterProperties;
+use parquet_key_management::async_crypto_factory::CryptoFactory;
+use parquet_key_management::async_kms::test::TestKmsClientFactory;
+use parquet_key_management::async_kms::KmsConnectionConfig;
 use parquet_key_management::config::{DecryptionConfiguration, EncryptionConfiguration};
-use parquet_key_management::crypto_factory::CryptoFactory;
-use parquet_key_management::kms::test::TestKmsClientFactory;
-use parquet_key_management::kms::KmsConnectionConfig;
-use std::fs::File;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-#[test]
-fn uniform_encryption_single_wrapping() {
-    let encryption_config = EncryptionConfiguration::builder("kf".into())
-        .set_double_wrapping(false)
-        .build()
-        .unwrap();
-    let decryption_config = DecryptionConfiguration::builder().build();
-
-    round_trip_parquet(encryption_config, decryption_config).unwrap();
-}
-
-#[test]
-fn uniform_encryption_double_wrapping() {
-    let encryption_config = EncryptionConfiguration::builder("kf".into())
-        .set_double_wrapping(true)
-        .build()
-        .unwrap();
-    let decryption_config = DecryptionConfiguration::builder().build();
-
-    round_trip_parquet(encryption_config, decryption_config).unwrap();
-}
-
-#[test]
-fn per_column_encryption_single_wrapping() {
-    let encryption_config = EncryptionConfiguration::builder("kf".into())
-        .set_double_wrapping(false)
-        .add_column_key("kc1".into(), vec!["x".into()])
-        .add_column_key("kc2".into(), vec!["y".into(), "z".into()])
-        .build()
-        .unwrap();
-    let decryption_config = DecryptionConfiguration::builder().build();
-
-    round_trip_parquet(encryption_config, decryption_config).unwrap();
-}
-
-#[test]
-fn per_column_encryption_double_wrapping() {
-    let encryption_config = EncryptionConfiguration::builder("kf".into())
-        .set_double_wrapping(true)
-        .add_column_key("kc1".into(), vec!["x".into()])
-        .add_column_key("kc2".into(), vec!["y".into(), "z".into()])
-        .build()
-        .unwrap();
-    let decryption_config = DecryptionConfiguration::builder().build();
-
-    round_trip_parquet(encryption_config, decryption_config).unwrap();
-}
-
-#[test]
-fn write_with_keys_and_read_with_kms() {
+#[tokio::test]
+async fn write_with_keys_and_read_with_async_kms() {
     let footer_key = b"0123456789012345";
     let encryption_properties = FileEncryptionProperties::builder(footer_key.to_vec())
         .build()
@@ -73,9 +25,11 @@ fn write_with_keys_and_read_with_kms() {
     let decryption_config = DecryptionConfiguration::builder().build();
     let decryption_properties = crypto_factory
         .file_decryption_properties(kms_config, decryption_config)
+        .await
         .unwrap();
 
-    let result = round_trip_parquet_with_properties(encryption_properties, decryption_properties);
+    let result =
+        round_trip_parquet_with_properties(encryption_properties, decryption_properties).await;
 
     match result {
         Ok(_) => panic!("Expected an error when reading encrypted Parquet that doesn't use a KMS"),
@@ -86,8 +40,8 @@ fn write_with_keys_and_read_with_kms() {
     }
 }
 
-#[test]
-fn multi_file_round_trip() {
+#[tokio::test]
+async fn multi_file_round_trip_with_async_kms() {
     let encryption_config = EncryptionConfiguration::builder("kf".into())
         .set_double_wrapping(true)
         .add_column_key("kc1".into(), vec!["x".into()])
@@ -107,35 +61,25 @@ fn multi_file_round_trip() {
     for _ in 0..5 {
         let encryption_properties = write_crypto_factory
             .file_encryption_properties(kms_config.clone(), &encryption_config)
+            .await
             .unwrap();
 
         let decryption_config = DecryptionConfiguration::builder().build();
         let decryption_properties = read_crypto_factory
             .file_decryption_properties(kms_config.clone(), decryption_config)
+            .await
             .unwrap();
 
-        round_trip_parquet_with_properties(encryption_properties, decryption_properties).unwrap()
+        round_trip_parquet_with_properties(encryption_properties, decryption_properties)
+            .await
+            .unwrap()
     }
 
     assert_eq!(write_client_factory.keys_wrapped(), 3);
     assert_eq!(read_client_factory.keys_unwrapped(), 3);
 }
 
-fn round_trip_parquet(
-    encryption_config: EncryptionConfiguration,
-    decryption_config: DecryptionConfiguration,
-) -> Result<()> {
-    let crypto_factory = CryptoFactory::new(TestKmsClientFactory::with_default_keys());
-    let kms_config = Arc::new(KmsConnectionConfig::default());
-    let encryption_properties =
-        crypto_factory.file_encryption_properties(kms_config.clone(), &encryption_config)?;
-    let decryption_properties =
-        crypto_factory.file_decryption_properties(kms_config, decryption_config)?;
-
-    round_trip_parquet_with_properties(encryption_properties, decryption_properties)
-}
-
-fn round_trip_parquet_with_properties(
+async fn round_trip_parquet_with_properties(
     encryption_properties: FileEncryptionProperties,
     decryption_properties: FileDecryptionProperties,
 ) -> Result<()> {
@@ -154,29 +98,29 @@ fn round_trip_parquet_with_properties(
     ])?;
 
     {
-        let file = File::create(&file_path)?;
+        let file = tokio::fs::File::create(&file_path).await?;
 
         let writer_properties = WriterProperties::builder()
             .with_file_encryption_properties(encryption_properties)
             .build();
 
-        let mut writer = ArrowWriter::try_new(file, write_batch.schema(), Some(writer_properties))?;
+        let mut writer =
+            AsyncArrowWriter::try_new(file, write_batch.schema(), Some(writer_properties))?;
 
-        writer.write(&write_batch)?;
-        writer.close()?;
+        writer.write(&write_batch).await?;
+        writer.close().await?;
     }
 
     let reader_options =
         ArrowReaderOptions::new().with_file_decryption_properties(decryption_properties);
 
-    let file = File::open(&file_path)?;
+    let file = tokio::fs::File::open(&file_path).await?;
 
-    let builder = ParquetRecordBatchReaderBuilder::try_new_with_options(file, reader_options)?;
-    let record_reader = builder.build()?;
-    for batch in record_reader {
-        let read_batch = batch?;
-        assert_eq!(write_batch, read_batch);
-    }
+    let builder = ParquetRecordBatchStreamBuilder::new_with_options(file, reader_options).await?;
+    let stream = builder.build()?;
+    let results = stream.try_collect::<Vec<_>>().await?;
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0], write_batch);
 
     Ok(())
 }
