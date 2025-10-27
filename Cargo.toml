@@ -17,7 +17,7 @@ edition = "2021"
 rust-version = "1.86.0"
 
 [workspace.dependencies]
-arrow = { version = ">=56.0", default-features = false }
-arrow-array = { version = ">=56.0", default-features = false }
-parquet = { version = ">=56.0", default-features = false, features = ["encryption"] }
+arrow = { version = "~56", default-features = false }
+arrow-array = { version = "~56.0", default-features = false }
+parquet = { version = "~56.0", default-features = false, features = ["encryption"] }
 tempfile = { version = "3.0", default-features = false }
