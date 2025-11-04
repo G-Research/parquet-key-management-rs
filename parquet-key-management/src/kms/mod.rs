@@ -1,9 +1,17 @@
 //! Types for integrating with a Key Management Server to use with Parquet Modular Encryption
 
+#[cfg(feature = "async")]
+mod async_impl;
+
 use parquet::errors::Result;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
+
+#[cfg(feature = "async")]
+pub(crate) use async_impl::bridge::BridgeKmsClientFactory;
+#[cfg(feature = "async")]
+pub use async_impl::{reenter_async, AsyncKmsClient, AsyncKmsClientFactory, AsyncKmsClientRef};
 
 /// API for interacting with a KMS.
 /// This should be implemented by user code for integration with your KMS.

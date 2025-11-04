@@ -15,7 +15,9 @@ and [Apache Spark](https://spark.apache.org/docs/latest/sql-data-sources-parquet
 
 Concrete KMS client implementations are not included.
 To integrate with your KMS client you need to implement
-the [`KmsClient`](https://docs.rs/parquet-key-management/latest/parquet_key_management/kms/trait.KmsClient.html) trait.
+the [`KmsClient`](https://docs.rs/parquet-key-management/latest/parquet_key_management/kms/trait.KmsClient.html) or
+[`AsyncKmsClient`](https://docs.rs/parquet-key-management/latest/parquet_key_management/kms/trait.AsyncKmsClient.html)
+traits.
 
 Please see the [API documentation](https://docs.rs/parquet-key-management/latest/parquet_key_management/)
 for examples of how to use this library and the full API reference.
@@ -24,4 +26,8 @@ for examples of how to use this library and the full API reference.
 
 The `parquet_key_management` crate provides the following features which may be enabled in your `Cargo.toml`:
 
+- `async` - enables the asynchronous KMS client API
+- `async-std` - enables support for the [async-std](https://crates.io/crates/async-std) runtime in the asynchronous KMS client API
+- `smol` - enables support for the [smol](https://crates.io/crates/smol) runtime in the asynchronous KMS client API
+- `tokio` - enables support for the [Tokio](https://crates.io/crates/tokio) runtime in the asynchronous KMS client API
 - `datafusion` - enables the `datafusion` module, which implements integration with [Apache DataFusion](https://datafusion.apache.org/)

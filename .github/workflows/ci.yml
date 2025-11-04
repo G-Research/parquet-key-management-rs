@@ -29,7 +29,7 @@ jobs:
       - name: Format check
         run: cargo fmt --verbose --check
       - name: Clippy
-        run: cargo clippy --verbose -- --deny warnings
+        run: cargo clippy --all-features --verbose -- --deny warnings
 
   docs:
     name: Build docs
@@ -44,7 +44,7 @@ jobs:
           key: cargo-cache-docs-${{ hashFiles('Cargo.toml') }}
           restore-keys: cargo-cache-docs-
       - name: Build docs
-        run: cargo doc --no-deps --document-private-items
+        run: cargo doc --all-features --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: "-Dwarnings"
 
@@ -65,7 +65,7 @@ jobs:
           key: cargo-cache-test-${{ matrix.runner }}-${{ hashFiles('Cargo.toml') }}
           restore-keys: cargo-cache-test-${{ matrix.runner }}-
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --all-features --verbose
       - name: Test
         run: cargo test --all-features --verbose
       - name: Install uv
@@ -91,9 +91,9 @@ jobs:
       - name: Write Cargo.lock
         run: cp Cargo.lock.msrv Cargo.lock
       - name: Install cargo-msrv
-        run: cargo install cargo-msrv
+        run: cargo install --locked cargo-msrv
       - name: Verify MSRV
-        run: cargo msrv verify --manifest-path parquet-key-management/Cargo.toml
+        run: cargo msrv verify --all-features --manifest-path parquet-key-management/Cargo.toml
 
   # A single job that succeeds if all jobs listed under 'needs' succeed.
   # This allows to configure a single job as a required check.

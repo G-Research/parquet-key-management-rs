@@ -9,6 +9,7 @@
 //! Double wrapping is used by default, where the DEKs are first encrypted with key encryption
 //! keys (KEKs) that are then encrypted with MEKs, to reduce KMS interactions.
 //!
+//! # Usage
 //! Using this module requires defining your own type that implements the
 //! [`KmsClient`](kms::KmsClient) trait and interacts with your organization's KMS.
 //!
@@ -18,6 +19,12 @@
 //! for writing encrypted Parquet files and
 //! [`FileDecryptionProperties`](parquet::encryption::decrypt::FileDecryptionProperties)
 //! for reading files.
+//!
+//! # `async` usage (`async` feature)
+//!
+//! This module also provides an [`AsyncKmsClient`](kms::AsyncKmsClient) trait that can be used
+//! with the [`async_reader`](parquet::arrow::async_reader) and
+//! [`async_writer`](parquet::arrow::async_writer) modules. See example on [`AsyncKmsClient`](kms::AsyncKmsClient).
 //!
 //! The encryption key metadata that is stored in the Parquet file is compatible with other Parquet
 //! implementations (PyArrow and parquet-java for example), so that files encrypted with this
