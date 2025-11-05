@@ -302,11 +302,15 @@ impl CryptoFactory {
     /// Create a new [`CryptoFactory`], providing a [`ReenterAsync`](reenter_async::ReenterAsync) implementation and a factory
     /// function for creating asynchronous KMS clients.
     ///
-    /// When using [`async-std`](async_std), consider using [`new_async_with_async_std`](CryptoFactory::new_async_with_async_std) instead.
+    /// When using [`async-std`], consider using [`new_async_with_async_std`](CryptoFactory::new_async_with_async_std) instead.
     ///
     /// When using [`smol`], consider using [`new_async_with_smol`](CryptoFactory::new_async_with_smol) instead.
     ///
     /// When using [`tokio`], consider using [`new_async_with_tokio`](CryptoFactory::new_async_with_tokio) instead.
+    ///
+    /// [`async-std`]: https://docs.rs/async-std/latest/async_std/
+    /// [`smol`]: https://docs.rs/smol/latest/smol/
+    /// [`tokio`]: https://docs.rs/tokio/latest/tokio/
     #[cfg(feature = "async")]
     pub fn new_async<R, F>(reenter: R, kms_client_factory: F) -> Self
     where
@@ -323,7 +327,9 @@ impl CryptoFactory {
     }
 
     /// Create a new [`CryptoFactory`], providing a factory function for creating asynchronous
-    /// KMS clients. Use this when running inside an [`async-std`](async_std) runtime.
+    /// KMS clients. Use this when running inside an [`async-std`] runtime.
+    ///
+    /// [`async-std`]: https://docs.rs/async-std/latest/async_std/
     #[cfg(feature = "async-std")]
     pub fn new_async_with_async_std<T>(kms_client_factory: T) -> Self
     where
@@ -334,6 +340,8 @@ impl CryptoFactory {
 
     /// Create a new [`CryptoFactory`], providing a factory function for creating asynchronous
     /// KMS clients. Use this when running inside a [`smol`] runtime.
+    ///
+    /// [`smol`]: https://docs.rs/smol/latest/smol/
     #[cfg(feature = "smol")]
     pub fn new_async_with_smol<T>(kms_client_factory: T) -> Self
     where
@@ -347,6 +355,8 @@ impl CryptoFactory {
     ///
     /// This implementation will panic if called outside of a Tokio runtime context or if the runtime
     /// is not multi-threaded.
+    ///
+    /// [`tokio`]: https://docs.rs/tokio/latest/tokio/
     #[cfg(feature = "tokio")]
     pub fn new_async_with_tokio<T>(kms_client_factory: T) -> Self
     where
