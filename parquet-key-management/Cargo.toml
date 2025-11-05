@@ -20,23 +20,30 @@ parquet = { workspace = true }
 ring = { version = "0.17", default-features = false, features = ["std"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
-datafusion-execution = { version = "50.0", default-features = false, features = ["parquet_encryption"], optional = true }
-datafusion-common = { version = "50.0", default-features = false, features = ["parquet", "parquet_encryption"], optional = true }
-object_store = { version = "0.12.2", default-features = false, optional = true }
-futures = { version = "0.3", default-features = false, optional = true }
+
+# optional
 async-std = { version = "1", optional = true }
+datafusion-execution = { version = "50.0", default-features = false, features = [
+  "parquet_encryption",
+], optional = true }
+datafusion-common = { version = "50.0", default-features = false, features = [
+  "parquet",
+  "parquet_encryption",
+], optional = true }
+futures = { workspace = true, optional = true }
+object_store = { version = "0.12.2", default-features = false, optional = true }
 smol = { version = "2", default-features = false, optional = true }
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread"], optional = true }
+tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 arrow = { workspace = true }
 arrow-array = { workspace = true }
+async-compat = { version = "0.2", default-features = false }
 datafusion = { version = "50.0", default-features = false, features = ["parquet", "parquet_encryption"] }
+futures = { workspace = true }
 parquet = { workspace = true, features = ["arrow"] }
 tempfile = { workspace = true }
-tokio = { version = "1", default-features = false, features = ["fs"] }
-futures = { version = "0.3", default-features = false }
-async-compat = { version = "0.2", default-features = false }
+tokio = { workspace = true, features = ["fs"] }
 
 [features]
 default = []
@@ -48,10 +55,6 @@ datafusion = ["dep:datafusion-execution", "dep:datafusion-common", "dep:object_s
 _test_utils = []
 
 [[test]]
-name = "round_trip"
-required-features = ["_test_utils"]
-
-[[test]]
 name = "integration_tests"
 required-features = ["_test_utils"]
 
@@ -60,9 +63,13 @@ name = "key_material"
 required-features = ["_test_utils"]
 
 [[test]]
-name = "datafusion_round_trip"
-required-features = ["_test_utils", "datafusion"]
+name = "round_trip"
+required-features = ["_test_utils"]
 
 [[test]]
 name = "async_round_trip"
 required-features = ["_test_utils", "async"]
+
+[[test]]
+name = "datafusion_round_trip"
+required-features = ["_test_utils", "datafusion"]
