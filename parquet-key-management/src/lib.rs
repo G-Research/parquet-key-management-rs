@@ -199,6 +199,8 @@
 //! # Ok::<(), parquet::errors::ParquetError>(())
 //! ```
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 pub mod crypto_factory;
 #[cfg(feature = "datafusion")]
 pub mod datafusion;
