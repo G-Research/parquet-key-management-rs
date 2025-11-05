@@ -2,6 +2,9 @@
 //! with the C++ Arrow LocalWrapKmsClient and records details of
 //! KMS interactions.
 
+#[cfg(feature = "async")]
+mod async_impl;
+
 use crate::kms::{KmsClient, KmsClientFactory, KmsClientRef, KmsConnectionConfig};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
@@ -11,6 +14,9 @@ use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+
+#[cfg(feature = "async")]
+pub use async_impl::TestAsyncKmsClientFactory;
 
 /// The test KMS client implementation
 pub struct TestKmsClient {
