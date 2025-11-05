@@ -21,11 +21,12 @@
 //! for reading files.
 //!
 //! # `async` usage (`async` feature)
-//!
 //! This module also provides an [`AsyncKmsClient`](kms::AsyncKmsClient) trait that can be used
-//! with the [`async_reader`](parquet::arrow::async_reader) and
-//! [`async_writer`](parquet::arrow::async_writer) modules. See example on [`AsyncKmsClient`](kms::AsyncKmsClient).
+//! with the [`async_reader`] and [`async_writer`] modules.
 //!
+//! See example on [`AsyncKmsClient`](kms::AsyncKmsClient).
+//!
+//! # Compatibility
 //! The encryption key metadata that is stored in the Parquet file is compatible with other Parquet
 //! implementations (PyArrow and parquet-java for example), so that files encrypted with this
 //! module may be decrypted by those implementations, and vice versa, as long as the
@@ -198,6 +199,11 @@
 //!
 //! # Ok::<(), parquet::errors::ParquetError>(())
 //! ```
+//!
+//! [`async_reader`]: https://docs.rs/parquet/latest/parquet/arrow/arrow_reader/index.html
+//! [`async_writer`]: https://docs.rs/parquet/latest/parquet/arrow/async_writer/index.html
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod crypto_factory;
 #[cfg(feature = "datafusion")]
