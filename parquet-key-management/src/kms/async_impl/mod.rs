@@ -36,6 +36,8 @@ use std::sync::Arc;
 /// use tempfile::TempDir;
 /// use tokio::fs::File;
 ///
+/// # #[cfg(not(feature = "tokio"))] fn main() {}
+/// # #[cfg(feature = "tokio")]
 /// # #[tokio::main(flavor = "multi_thread")]
 /// # async fn main() -> Result<()> {
 ///     let temp_dir = TempDir::new()?;
