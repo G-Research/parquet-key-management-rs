@@ -2,11 +2,7 @@
 name = "pyarrow-integration-tests"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = [
-    "pyarrow>=20.0.0",
-    "pycryptodome>=3.22.0",
-    "pytest>=8.3.5",
-]
+dependencies = ["pyarrow>=20.0.0", "pycryptodome>=3.22.0", "pytest>=8.3.5"]
 
 [project.scripts]
 generate_test_files = "pyarrow_integration_tests:generate_test_files"

@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Lint
+  lint-rust:
+    name: Lint Rust code
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,12 +24,24 @@ jobs:
         with:
           path: |
             ~/.cargo
-          key: cargo-cache-lint-${{ hashFiles('Cargo.toml') }}
-          restore-keys: cargo-cache-lint-
+          key: cargo-cache-lint-rust-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-lint-rust-
       - name: Format check
         run: cargo fmt --verbose --check
       - name: Clippy
         run: cargo clippy --all-features --verbose -- --deny warnings
+
+  lint-toml:
+    name: Lint TOML files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install taplo
+        run: curl -fsSL https://github.com/tamasfe/taplo/releases/latest/download/taplo-linux-x86_64.gz | gzip -d - | sudo install -m 755 /dev/stdin /usr/local/bin/taplo
+      - name: Format check
+        run: taplo format --check
+      - name: Lint
+        run: taplo lint --default-schema-catalogs
 
   docs:
     name: Build docs
@@ -103,7 +115,8 @@ jobs:
     if: always()
     # the if clauses below have to reflect the number of jobs listed here
     needs:
-      - lint
+      - lint-rust
+      - lint-toml
       - docs
       - test
       - msrv
@@ -113,12 +126,12 @@ jobs:
     steps:
       - name: "Success"
         # we expect all required jobs to have success result
-        if: env.RESULTS == 'success,success,success,success'
+        if: env.RESULTS == 'success,success,success,success,success'
         run: true
         shell: bash
       - name: "Failure"
         # we expect all required jobs to have success result, fail otherwise
-        if: env.RESULTS != 'success,success,success,success'
+        if: env.RESULTS != 'success,success,success,success,success'
         run: false
         shell: bash
 
