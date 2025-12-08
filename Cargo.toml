@@ -9,7 +9,7 @@ repository = "https://github.com/G-Research/parquet-key-management-rs"
 readme = "README.md"
 license = "Apache-2.0"
 edition = "2021"
-rust-version = "1.86.0"
+rust-version = "1.88.0"
 
 [workspace.dependencies]
 arrow = { version = "57.0", default-features = false }
