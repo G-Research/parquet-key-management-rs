@@ -23,7 +23,7 @@ async fn write_with_keys_and_read_with_async_kms<CF, RF, Fut>(
     round_trip_fn: RF,
 ) where
     CF: Fn(TestAsyncKmsClientFactory) -> CryptoFactory,
-    RF: Fn(FileEncryptionProperties, FileDecryptionProperties) -> Fut,
+    RF: Fn(Arc<FileEncryptionProperties>, Arc<FileDecryptionProperties>) -> Fut,
     Fut: Future<Output = Result<()>>,
 {
     let footer_key = b"0123456789012345";
@@ -53,7 +53,7 @@ async fn write_with_keys_and_read_with_async_kms<CF, RF, Fut>(
 async fn multi_file_round_trip_with_async_kms<CF, RF, Fut>(crypto_factory_fn: CF, round_trip_fn: RF)
 where
     CF: Fn(Arc<TestAsyncKmsClientFactory>) -> CryptoFactory,
-    RF: Fn(FileEncryptionProperties, FileDecryptionProperties) -> Fut,
+    RF: Fn(Arc<FileEncryptionProperties>, Arc<FileDecryptionProperties>) -> Fut,
     Fut: Future<Output = Result<()>>,
 {
     let encryption_config = EncryptionConfiguration::builder("kf".into())
@@ -95,8 +95,8 @@ where
 async fn round_trip_parquet_with_properties<W, R, CFut, OFut, CFn, OFn>(
     create_fn: CFn,
     open_fn: OFn,
-    encryption_properties: FileEncryptionProperties,
-    decryption_properties: FileDecryptionProperties,
+    encryption_properties: Arc<FileEncryptionProperties>,
+    decryption_properties: Arc<FileDecryptionProperties>,
 ) -> Result<()>
 where
     W: AsyncWrite + Send + Unpin,
@@ -174,8 +174,8 @@ fn multi_file_round_trip_with_async_kms_async_std() {
 
 #[cfg(feature = "async-std")]
 async fn round_trip_parquet_with_properties_async_std(
-    encryption_properties: FileEncryptionProperties,
-    decryption_properties: FileDecryptionProperties,
+    encryption_properties: Arc<FileEncryptionProperties>,
+    decryption_properties: Arc<FileDecryptionProperties>,
 ) -> Result<()> {
     use async_compat::CompatExt;
 
@@ -220,8 +220,8 @@ fn multi_file_round_trip_with_async_kms_smol() {
 
 #[cfg(feature = "smol")]
 async fn round_trip_parquet_with_properties_smol(
-    encryption_properties: FileEncryptionProperties,
-    decryption_properties: FileDecryptionProperties,
+    encryption_properties: Arc<FileEncryptionProperties>,
+    decryption_properties: Arc<FileDecryptionProperties>,
 ) -> Result<()> {
     use async_compat::CompatExt;
 
@@ -262,8 +262,8 @@ async fn multi_file_round_trip_with_async_kms_tokio() {
 
 #[cfg(feature = "tokio")]
 async fn round_trip_parquet_with_properties_tokio(
-    encryption_properties: FileEncryptionProperties,
-    decryption_properties: FileDecryptionProperties,
+    encryption_properties: Arc<FileEncryptionProperties>,
+    decryption_properties: Arc<FileDecryptionProperties>,
 ) -> Result<()> {
     round_trip_parquet_with_properties(
         |path| {

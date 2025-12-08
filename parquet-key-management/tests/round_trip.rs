@@ -137,8 +137,8 @@ fn round_trip_parquet(
 }
 
 fn round_trip_parquet_with_properties(
-    encryption_properties: FileEncryptionProperties,
-    decryption_properties: FileDecryptionProperties,
+    encryption_properties: Arc<FileEncryptionProperties>,
+    decryption_properties: Arc<FileDecryptionProperties>,
 ) -> Result<()> {
     let temp_dir = TempDir::new()?;
     let file_path = temp_dir.path().join("test_file.parquet");

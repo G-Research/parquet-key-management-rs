@@ -42,7 +42,7 @@ impl EncryptionFactory for KmsEncryptionFactory {
         config: &EncryptionFactoryOptions,
         _schema: &SchemaRef,
         _file_path: &object_store::path::Path,
-    ) -> datafusion_common::Result<Option<FileEncryptionProperties>> {
+    ) -> datafusion_common::Result<Option<Arc<FileEncryptionProperties>>> {
         let encryption_configuration = build_encryption_configuration(config)?;
         Ok(Some(self.crypto_factory.file_encryption_properties(
             Arc::clone(&self.kms_connection_config),
@@ -54,7 +54,7 @@ impl EncryptionFactory for KmsEncryptionFactory {
         &self,
         config: &EncryptionFactoryOptions,
         _file_path: &object_store::path::Path,
-    ) -> datafusion_common::Result<Option<FileDecryptionProperties>> {
+    ) -> datafusion_common::Result<Option<Arc<FileDecryptionProperties>>> {
         let decryption_configuration = build_decryption_configuration(config)?;
         Ok(Some(self.crypto_factory.file_decryption_properties(
             Arc::clone(&self.kms_connection_config),

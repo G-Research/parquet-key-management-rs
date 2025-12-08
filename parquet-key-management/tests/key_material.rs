@@ -56,7 +56,7 @@ fn can_read_key_material() {
         .unwrap();
 
     let reader =
-        ParquetMetaDataReader::new().with_decryption_properties(Some(&decryption_properties));
+        ParquetMetaDataReader::new().with_decryption_properties(Some(decryption_properties));
     let metadata = reader.parse_and_finish(&file).unwrap();
     let column_metadata = metadata.row_group(0).column(0);
     let column_crypto = column_metadata.crypto_metadata().unwrap();
