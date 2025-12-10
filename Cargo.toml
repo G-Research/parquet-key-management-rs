@@ -3,18 +3,18 @@ members = ["parquet-key-management", "generate-test-files"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.1"
+version = "0.6.0"
 homepage = "https://github.com/G-Research/parquet-key-management-rs"
 repository = "https://github.com/G-Research/parquet-key-management-rs"
 readme = "README.md"
 license = "Apache-2.0"
 edition = "2021"
-rust-version = "1.86.0"
+rust-version = "1.88.0"
 
 [workspace.dependencies]
-arrow = { version = "56.0", default-features = false }
-arrow-array = { version = "56.0", default-features = false }
+arrow = { version = "57.0", default-features = false }
+arrow-array = { version = "57.0", default-features = false }
 futures = { version = "0.3", default-features = false }
-parquet = { version = "56.0", default-features = false, features = ["encryption"] }
+parquet = { version = "57.0", default-features = false, features = ["encryption"] }
 tempfile = { version = "3.0", default-features = false }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread"] }

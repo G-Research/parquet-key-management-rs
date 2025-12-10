@@ -56,15 +56,15 @@ fn can_read_key_material() {
         .unwrap();
 
     let reader =
-        ParquetMetaDataReader::new().with_decryption_properties(Some(&decryption_properties));
+        ParquetMetaDataReader::new().with_decryption_properties(Some(decryption_properties));
     let metadata = reader.parse_and_finish(&file).unwrap();
     let column_metadata = metadata.row_group(0).column(0);
     let column_crypto = column_metadata.crypto_metadata().unwrap();
     match column_crypto {
-        ColumnCryptoMetaData::EncryptionWithFooterKey => {
+        ColumnCryptoMetaData::ENCRYPTION_WITH_FOOTER_KEY => {
             panic!("Expected encryption with a column key")
         }
-        ColumnCryptoMetaData::EncryptionWithColumnKey(column_key) => {
+        ColumnCryptoMetaData::ENCRYPTION_WITH_COLUMN_KEY(column_key) => {
             let key_material = column_key.key_metadata.as_ref().unwrap();
             let key_material = std::str::from_utf8(key_material).unwrap();
             let key_material = KeyMaterial::deserialize(key_material).unwrap();

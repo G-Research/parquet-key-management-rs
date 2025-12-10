@@ -370,7 +370,7 @@ impl CryptoFactory {
         &self,
         kms_connection_config: Arc<KmsConnectionConfig>,
         decryption_configuration: DecryptionConfiguration,
-    ) -> Result<FileDecryptionProperties> {
+    ) -> Result<Arc<FileDecryptionProperties>> {
         let key_retriever = Arc::new(KeyUnwrapper::new(
             self.kms_manager.clone(),
             kms_connection_config,
@@ -384,7 +384,7 @@ impl CryptoFactory {
         &self,
         kms_connection_config: Arc<KmsConnectionConfig>,
         encryption_configuration: &EncryptionConfiguration,
-    ) -> Result<FileEncryptionProperties> {
+    ) -> Result<Arc<FileEncryptionProperties>> {
         if !encryption_configuration.internal_key_material {
             return Err(ParquetError::NYI(
                 "External key material is not yet implemented".to_owned(),

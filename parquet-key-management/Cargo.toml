@@ -23,10 +23,10 @@ serde_json = { version = "1.0", default-features = false, features = ["std"] }
 
 # optional
 async-std = { version = "1", optional = true }
-datafusion-execution = { version = "50.0", default-features = false, features = [
+datafusion-execution = { version = "51.0", default-features = false, features = [
   "parquet_encryption",
 ], optional = true }
-datafusion-common = { version = "50.0", default-features = false, features = [
+datafusion-common = { version = "51.0", default-features = false, features = [
   "parquet",
   "parquet_encryption",
 ], optional = true }
@@ -39,7 +39,7 @@ tokio = { workspace = true, optional = true }
 arrow = { workspace = true }
 arrow-array = { workspace = true }
 async-compat = { version = "0.2", default-features = false }
-datafusion = { version = "50.0", default-features = false, features = ["parquet", "parquet_encryption"] }
+datafusion = { version = "51.0", default-features = false, features = ["parquet", "parquet_encryption"] }
 futures = { workspace = true }
 parquet = { workspace = true, features = ["arrow"] }
 tempfile = { workspace = true }

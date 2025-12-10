@@ -157,12 +157,12 @@ fn verify_parquet_file(
         let col_b = row_group.column(0);
         assert!(matches!(
             col_b.crypto_metadata(),
-            Some(ColumnCryptoMetaData::EncryptionWithColumnKey(_))
+            Some(ColumnCryptoMetaData::ENCRYPTION_WITH_COLUMN_KEY(_))
         ));
         let col_c = row_group.column(1);
         assert!(matches!(
             col_c.crypto_metadata(),
-            Some(ColumnCryptoMetaData::EncryptionWithColumnKey(_))
+            Some(ColumnCryptoMetaData::ENCRYPTION_WITH_COLUMN_KEY(_))
         ));
         let col_d = row_group.column(2);
         assert!(col_d.crypto_metadata().is_none());
