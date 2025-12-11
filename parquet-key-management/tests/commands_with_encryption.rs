@@ -1,3 +1,4 @@
+mod kms_encryption;
 
 use arrow::{
     array::{Int32Array, StringArray, TimestampMicrosecondArray},
@@ -15,9 +16,9 @@ use deltalake_core::kernel::{DataType, PrimitiveType, StructField};
 use deltalake_core::operations::collect_sendable_stream;
 use deltalake_core::parquet::encryption::decrypt::FileDecryptionProperties;
 use deltalake_core::table::file_format_options::{FileFormatRef, SimpleFileFormatOptions};
-use deltalake_core::test_utils::kms_encryption::{KmsFileFormatOptions, TableEncryption};
 use deltalake_core::{arrow, parquet, DeltaOps};
 use deltalake_core::{operations::optimize::OptimizeType, DeltaTable, DeltaTableError};
+use kms_encryption::{KmsFileFormatOptions, TableEncryption};
 use parquet_key_management::{
     crypto_factory::{CryptoFactory, DecryptionConfiguration, EncryptionConfiguration},
     datafusion::{KmsEncryptionFactory, KmsEncryptionFactoryOptions},
