@@ -81,5 +81,5 @@ name = "datafusion_round_trip"
 required-features = ["_test_utils", "datafusion"]
 
 [[test]]
-name = "commands_with_encryption"
+name = "delta_rs_kms"
 required-features = ["_test_utils", "datafusion", "tokio"]

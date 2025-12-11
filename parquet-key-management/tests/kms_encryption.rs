@@ -10,15 +10,15 @@
 //! `DeltaOps` via the `with_file_format_options` method.
 //! See `crates/deltalake/examples/basic_operations_encryption.rs` for a working example.
 
-use deltalake_core::table::file_format_options::{
-    FileFormatOptions, TableOptions, WriterPropertiesFactory, WriterPropertiesFactoryRef,
-};
-use deltalake_core::{crate_version, DeltaResult};
 use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::config::{ConfigField, EncryptionFactoryOptions, ExtensionOptions};
 use datafusion::execution::parquet_encryption::EncryptionFactory;
+use deltalake_core::table::file_format_options::{
+    FileFormatOptions, TableOptions, WriterPropertiesFactory, WriterPropertiesFactoryRef,
+};
+use deltalake_core::{crate_version, DeltaResult};
 use object_store::path::Path;
 use parquet::basic::Compression;
 use parquet::file::properties::{WriterProperties, WriterPropertiesBuilder};
@@ -36,7 +36,7 @@ pub struct TableEncryption {
 }
 
 impl TableEncryption {
-    pub fn new(
+    pub fn _new(
         encryption_factory: Arc<dyn EncryptionFactory>,
         configuration: EncryptionFactoryOptions,
     ) -> Self {
@@ -87,8 +87,7 @@ impl TableEncryption {
     }
 }
 
-
-// More advanced factory with KMS support
+// More advanced writer properties factory with KMS support
 #[derive(Clone, Debug)]
 pub struct KMSWriterPropertiesFactory {
     writer_properties: WriterProperties,
