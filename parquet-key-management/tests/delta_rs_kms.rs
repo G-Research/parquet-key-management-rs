@@ -16,8 +16,8 @@ use deltalake_core::kernel::{DataType, PrimitiveType, StructField};
 use deltalake_core::operations::collect_sendable_stream;
 use deltalake_core::parquet::encryption::decrypt::FileDecryptionProperties;
 use deltalake_core::table::file_format_options::{FileFormatRef, SimpleFileFormatOptions};
-use deltalake_core::{arrow, parquet, DeltaOps};
 use deltalake_core::{operations::optimize::OptimizeType, DeltaTable, DeltaTableError};
+use deltalake_core::{parquet, DeltaOps};
 use kms_encryption::{KmsFileFormatOptions, TableEncryption};
 use parquet_key_management::{
     crypto_factory::{CryptoFactory, DecryptionConfiguration, EncryptionConfiguration},
@@ -85,7 +85,7 @@ fn get_table_batches() -> RecordBatch {
 // Create a DeltaOps instance with the specified file_format_options to apply crypto settings.
 async fn ops_from_uri(uri: &str) -> Result<DeltaOps, DeltaTableError> {
     let prefix_uri = format!("file://{}", uri);
-    let url = Url::parse(&*prefix_uri).unwrap();
+    let url = Url::parse(&prefix_uri).unwrap();
     let ops = DeltaOps::try_from_uri(url).await?;
     Ok(ops)
 }
@@ -198,8 +198,8 @@ fn merge_source() -> DataFrame {
     let batch = RecordBatch::try_new(
         schema,
         vec![
-            Arc::new(arrow::array::Int32Array::from(vec![10, 20, 30])),
-            Arc::new(arrow::array::StringArray::from(vec!["B", "C", "X"])),
+            Arc::new(Int32Array::from(vec![10, 20, 30])),
+            Arc::new(StringArray::from(vec!["B", "C", "X"])),
             Arc::new(TimestampMicrosecondArray::from(vec![
                 1000000012, 1000000012, 1000000012,
             ])),
@@ -291,7 +291,7 @@ fn plain_crypto_format() -> Result<FileFormatRef, DeltaTableError> {
 fn plain_crypto_format_bad_decryptor() -> Result<FileFormatRef, DeltaTableError> {
     let encryption_key: Vec<_> = b"1234567890123450".to_vec();
     let decryption_key: Vec<_> = b"0123456789012345".to_vec();
-    create_plain_crypto_format(encryption_key.clone(), decryption_key.clone())
+    create_plain_crypto_format(encryption_key, decryption_key)
 }
 fn kms_crypto_format() -> Result<FileFormatRef, DeltaTableError> {
     let crypto_factory =
@@ -311,7 +311,7 @@ fn kms_crypto_format() -> Result<FileFormatRef, DeltaTableError> {
         TableEncryption::new_with_extension_options(encryption_factory, &kms_options)?;
 
     let file_format_options =
-        Arc::new(KmsFileFormatOptions::new(table_encryption.clone())) as FileFormatRef;
+        Arc::new(KmsFileFormatOptions::new(table_encryption)) as FileFormatRef;
     Ok(file_format_options)
 }
 
@@ -446,7 +446,7 @@ async fn test_optimize_z_order(file_format_options: FileFormatRef, decrypt_final
     // Use the shared modify test template; perform optimization steps inside the modifier
     let expected: Vec<String> = full_table_data().iter().map(|s| s.to_string()).collect();
     run_modify_test(
-        file_format_options.clone(),
+        file_format_options,
         |uri, opts| Box::pin(optimize_table_z_order(uri, opts)),
         expected,
         decrypt_final_read,
