@@ -49,7 +49,9 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 url = { version = "2.5" }
 uuid = { version = "1.11", features = ["v4"] }
-deltalake-core = { git = "https://github.com/corwinjoy/delta-rs.git", branch = "file_format_options_squashed", features = ["datafusion"]}
+deltalake-core = { git = "https://github.com/corwinjoy/delta-rs.git", branch = "file_format_options_squashed", features = [
+  "datafusion",
+] }
 
 [features]
 default = []

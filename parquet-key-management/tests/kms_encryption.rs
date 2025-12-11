@@ -1,6 +1,5 @@
-//! Integration tests for KMS encryption with delta-rs.
-//! This file tests the configuration and usage of TableEncryption and KmsFileFormatOptions
-//! in various encryption scenarios.
+//! This file provides the classes TableEncryption
+//! and KmsFileFormatOptions to support KMS encryption in delta-rs
 
 use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;

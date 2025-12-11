@@ -1,3 +1,7 @@
+//! Integration tests for KMS encryption with delta-rs.
+//! This file tests the configuration and usage of TableEncryption
+//! and KmsFileFormatOptions in various encryption scenarios.
+
 mod kms_encryption;
 
 use arrow::{
