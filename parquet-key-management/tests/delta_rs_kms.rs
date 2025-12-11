@@ -107,8 +107,12 @@ async fn create_table(
     table_name: &str,
     file_format_options: &FileFormatRef,
 ) -> Result<DeltaTable, DeltaTableError> {
-    fs::remove_dir_all(uri)?;
-    fs::create_dir(uri)?;
+    match fs::remove_dir_all(uri) {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+    fs::create_dir_all(uri)?;
     let ops = ops_with_crypto(uri, file_format_options).await?;
 
     // The operations module uses a builder pattern that allows specifying several options

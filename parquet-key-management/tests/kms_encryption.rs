@@ -1,14 +1,6 @@
-//! This module contains classes and functions to support encryption with a KMS.
-//! These are not part of the core API but are used in the encryption tests and examples.
-//!
-//! The first main class is `TableEncryption`, which encapsulates the encryption configuration
-//! and the encryption factory.
-//!
-//! The second main class is `KmsFileFormatOptions` which configures the file format options for
-//! KMS encryption. It is used to create a `FileFormatOptions` instance that can be
-//! passed to the `DeltaTable::create` method. This class can also be directly used in
-//! `DeltaOps` via the `with_file_format_options` method.
-//! See `crates/deltalake/examples/basic_operations_encryption.rs` for a working example.
+//! Integration tests for KMS encryption with delta-rs.
+//! This file tests the configuration and usage of TableEncryption and KmsFileFormatOptions
+//! in various encryption scenarios.
 
 use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
@@ -36,16 +28,6 @@ pub struct TableEncryption {
 }
 
 impl TableEncryption {
-    pub fn _new(
-        encryption_factory: Arc<dyn EncryptionFactory>,
-        configuration: EncryptionFactoryOptions,
-    ) -> Self {
-        Self {
-            encryption_factory,
-            configuration,
-        }
-    }
-
     pub fn new_with_extension_options<T: ExtensionOptions>(
         encryption_factory: Arc<dyn EncryptionFactory>,
         options: &T,
@@ -97,7 +79,7 @@ pub struct KMSWriterPropertiesFactory {
 impl KMSWriterPropertiesFactory {
     pub fn with_encryption(table_encryption: TableEncryption) -> Self {
         let writer_properties = WriterProperties::builder()
-            .set_compression(Compression::SNAPPY) // Code assumes Snappy by default
+            .set_compression(Compression::SNAPPY) // Use Snappy compression by default
             .set_created_by(format!("delta-rs version {}", crate_version()))
             .build();
         Self {
