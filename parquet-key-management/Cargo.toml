@@ -44,6 +44,7 @@ futures = { workspace = true }
 parquet = { workspace = true, features = ["arrow"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
+deltalake-core = { git = "https://github.com/corwinjoy/delta-rs.git", branch = "file_format_options_squashed"}
 
 [features]
 default = []
@@ -73,3 +74,7 @@ required-features = ["_test_utils", "async"]
 [[test]]
 name = "datafusion_round_trip"
 required-features = ["_test_utils", "datafusion"]
+
+[[test]]
+name = "commands_with_encryption"
+required-features = ["_test_utils"]

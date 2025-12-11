@@ -1,4 +1,3 @@
-#![cfg(feature = "kms_encryption_tests")]
 
 use arrow::{
     array::{Int32Array, StringArray, TimestampMicrosecondArray},
