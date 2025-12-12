@@ -38,12 +38,20 @@ tokio = { workspace = true, optional = true }
 [dev-dependencies]
 arrow = { workspace = true }
 arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
 async-compat = { version = "0.2", default-features = false }
 datafusion = { version = "51.0", default-features = false, features = ["parquet", "parquet_encryption"] }
 futures = { workspace = true }
+object_store = { version = "0.12.2", default-features = false }
 parquet = { workspace = true, features = ["arrow"] }
+paste = { version = "1.0" }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
+url = { version = "2.5" }
+uuid = { version = "1.11", features = ["v4"] }
+deltalake-core = { git = "https://github.com/corwinjoy/delta-rs.git", branch = "file_format_options_squashed", features = [
+  "datafusion",
+] }
 
 [features]
 default = []
@@ -73,3 +81,7 @@ required-features = ["_test_utils", "async"]
 [[test]]
 name = "datafusion_round_trip"
 required-features = ["_test_utils", "datafusion"]
+
+[[test]]
+name = "delta_rs_kms"
+required-features = ["_test_utils", "datafusion", "tokio"]
