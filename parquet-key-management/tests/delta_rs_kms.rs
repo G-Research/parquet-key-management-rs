@@ -22,7 +22,7 @@ use deltalake_core::operations::optimize::OptimizeType;
 use deltalake_core::parquet::encryption::decrypt::FileDecryptionProperties;
 use deltalake_core::table::builder::DeltaTableBuilder;
 use deltalake_core::table::file_format_options::{FileFormatRef, SimpleFileFormatOptions};
-use deltalake_core::{DeltaTable, DeltaTableError, parquet};
+use deltalake_core::{parquet, DeltaTable, DeltaTableError};
 use kms_encryption::{KmsFileFormatOptions, TableEncryption};
 use parquet_key_management::{
     crypto_factory::{CryptoFactory, DecryptionConfiguration, EncryptionConfiguration},
