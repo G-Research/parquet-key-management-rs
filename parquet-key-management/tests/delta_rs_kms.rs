@@ -89,7 +89,7 @@ fn get_table_batches() -> RecordBatch {
 
 fn table_from_uri(uri: &str) -> Result<DeltaTable, DeltaTableError> {
     let prefix_uri = format!("file://{}", uri);
-    let url = Url::parse(&*prefix_uri).unwrap();
+    let url = Url::parse(&prefix_uri).unwrap();
     let table = DeltaTableBuilder::from_url(url)?.build()?;
     Ok(table)
 }
@@ -99,7 +99,7 @@ fn table_with_crypto(
     file_format_options: &FileFormatRef,
 ) -> Result<DeltaTable, DeltaTableError> {
     let prefix_uri = format!("file://{}", uri);
-    let url = Url::parse(&*prefix_uri).unwrap();
+    let url = Url::parse(&prefix_uri).unwrap();
     let table = DeltaTableBuilder::from_url(url)?
         .with_file_format_options(file_format_options.clone())
         .build()?;
@@ -111,8 +111,12 @@ async fn create_table(
     table_name: &str,
     file_format_options: &FileFormatRef,
 ) -> Result<DeltaTable, DeltaTableError> {
-    fs::remove_dir_all(uri)?;
-    fs::create_dir(uri)?;
+    match fs::remove_dir_all(uri) {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+    fs::create_dir_all(uri)?;
     let table = table_with_crypto(uri, file_format_options)?;
 
     // The operations module uses a builder pattern that allows specifying several options
