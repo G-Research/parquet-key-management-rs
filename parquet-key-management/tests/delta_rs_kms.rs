@@ -18,10 +18,11 @@ use datafusion::{
 };
 use deltalake_core::kernel::{DataType, PrimitiveType, StructField};
 use deltalake_core::operations::collect_sendable_stream;
+use deltalake_core::operations::optimize::OptimizeType;
 use deltalake_core::parquet::encryption::decrypt::FileDecryptionProperties;
+use deltalake_core::table::builder::DeltaTableBuilder;
 use deltalake_core::table::file_format_options::{FileFormatRef, SimpleFileFormatOptions};
-use deltalake_core::{operations::optimize::OptimizeType, DeltaTable, DeltaTableError};
-use deltalake_core::{parquet, DeltaOps};
+use deltalake_core::{parquet, DeltaTable, DeltaTableError};
 use kms_encryption::{KmsFileFormatOptions, TableEncryption};
 use parquet_key_management::{
     crypto_factory::{CryptoFactory, DecryptionConfiguration, EncryptionConfiguration},
@@ -86,24 +87,23 @@ fn get_table_batches() -> RecordBatch {
     .unwrap()
 }
 
-// Create a DeltaOps instance with the specified file_format_options to apply crypto settings.
-async fn ops_from_uri(uri: &str) -> Result<DeltaOps, DeltaTableError> {
+fn table_from_uri(uri: &str) -> Result<DeltaTable, DeltaTableError> {
     let prefix_uri = format!("file://{}", uri);
     let url = Url::parse(&prefix_uri).unwrap();
-    let ops = DeltaOps::try_from_uri(url).await?;
-    Ok(ops)
+    let table = DeltaTableBuilder::from_url(url)?.build()?;
+    Ok(table)
 }
 
-// Create a DeltaOps instance with the specified file_format_options to apply crypto settings.
-async fn ops_with_crypto(
+fn table_with_crypto(
     uri: &str,
     file_format_options: &FileFormatRef,
-) -> Result<DeltaOps, DeltaTableError> {
-    let ops = ops_from_uri(uri).await?;
-    let ops = ops
+) -> Result<DeltaTable, DeltaTableError> {
+    let prefix_uri = format!("file://{}", uri);
+    let url = Url::parse(&prefix_uri).unwrap();
+    let table = DeltaTableBuilder::from_url(url)?
         .with_file_format_options(file_format_options.clone())
-        .await?;
-    Ok(ops)
+        .build()?;
+    Ok(table)
 }
 
 async fn create_table(
@@ -117,12 +117,12 @@ async fn create_table(
         Err(e) => return Err(e.into()),
     }
     fs::create_dir_all(uri)?;
-    let ops = ops_with_crypto(uri, file_format_options).await?;
+    let table = table_with_crypto(uri, file_format_options)?;
 
     // The operations module uses a builder pattern that allows specifying several options
     // on how the command behaves. The builders implement `Into<Future>`, so once
     // options are set you can run the command using `.await`.
-    let table = ops
+    let table = table
         .create()
         .with_columns(get_table_columns())
         .with_table_name(table_name)
@@ -132,12 +132,12 @@ async fn create_table(
     assert_eq!(table.version(), Some(0));
 
     let batch = get_table_batches();
-    let table = DeltaOps(table).write(vec![batch.clone()]).await?;
+    let table = table.write(vec![batch.clone()]).await?;
 
     assert_eq!(table.version(), Some(1));
 
     // Append records to the table
-    let table = DeltaOps(table).write(vec![batch]).await?;
+    let table = table.write(vec![batch]).await?;
 
     assert_eq!(table.version(), Some(2));
 
@@ -149,11 +149,12 @@ async fn read_table(
     file_format_options: &FileFormatRef,
     use_file_format_options: bool,
 ) -> Result<Vec<RecordBatch>, DeltaTableError> {
-    let ops = match use_file_format_options {
-        true => ops_with_crypto(uri, file_format_options).await?,
-        false => ops_from_uri(uri).await?,
+    let mut table = match use_file_format_options {
+        true => table_with_crypto(uri, file_format_options)?,
+        false => table_from_uri(uri)?,
     };
-    let (_table, stream) = ops.load().await?;
+    table.load().await?;
+    let (_table, stream) = table.scan_table().await?;
     let data: Vec<RecordBatch> = collect_sendable_stream(stream).await?;
     Ok(data)
 }
@@ -162,12 +163,11 @@ async fn update_table(
     uri: &str,
     file_format_options: &FileFormatRef,
 ) -> Result<(), DeltaTableError> {
-    let ops = ops_with_crypto(uri, file_format_options).await?;
-    let table: DeltaTable = ops.into();
+    let mut table = table_with_crypto(uri, file_format_options)?;
+    table.load().await?;
     let version = table.version();
-    let ops: DeltaOps = table.into();
 
-    let (table, _metrics) = ops
+    let (table, _metrics) = table
         .update()
         .with_predicate(col("int").eq(lit(1)))
         .with_update("int", "100")
@@ -183,12 +183,11 @@ async fn delete_from_table(
     uri: &str,
     file_format_options: &FileFormatRef,
 ) -> Result<(), DeltaTableError> {
-    let ops = ops_with_crypto(uri, file_format_options).await?;
-    let table: DeltaTable = ops.into();
+    let mut table = table_with_crypto(uri, file_format_options)?;
+    table.load().await?;
     let version = table.version();
-    let ops: DeltaOps = table.into();
 
-    let (table, _metrics) = ops
+    let (table, _metrics) = table
         .delete()
         .with_predicate(col("int").eq(lit(2)))
         .await
@@ -222,11 +221,12 @@ async fn merge_table(
     uri: &str,
     file_format_options: &FileFormatRef,
 ) -> Result<(), DeltaTableError> {
-    let ops = ops_with_crypto(uri, file_format_options).await?;
+    let mut table = table_with_crypto(uri, file_format_options)?;
+    table.load().await?;
 
     let source = merge_source();
 
-    let (_table, _metrics) = ops
+    let (_table, _metrics) = table
         .merge(source, col("target.int").eq(col("source.int")))
         .with_source_alias("source")
         .with_target_alias("target")
@@ -241,8 +241,9 @@ async fn optimize_table(
     file_format_options: &FileFormatRef,
     optimize_type: OptimizeType,
 ) -> Result<(), DeltaTableError> {
-    let ops = ops_with_crypto(uri, file_format_options).await?;
-    let (_table, _metrics) = ops.optimize().with_type(optimize_type).await?;
+    let mut table = table_with_crypto(uri, file_format_options)?;
+    table.load().await?;
+    let (_table, _metrics) = table.optimize().with_type(optimize_type).await?;
     Ok(())
 }
 
