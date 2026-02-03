@@ -19,4 +19,3 @@ futures = { version = "0.3", default-features = false }
 parquet = { version = "57.2", default-features = false, features = ["encryption"] }
 tempfile = { version = "3.24", default-features = false }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread"] }
-
