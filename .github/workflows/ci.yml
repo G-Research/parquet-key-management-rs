@@ -41,7 +41,7 @@ jobs:
       - name: Format check
         run: taplo format --check
       - name: Lint
-        run: taplo lint --default-schema-catalogs
+        run: taplo lint
 
   docs:
     name: Build docs

@@ -505,7 +505,7 @@ async fn test_delete(file_format_options: FileFormatRef, decrypt_final_read: boo
 encryption_tests!(test_delete);
 
 async fn test_merge(file_format_options: FileFormatRef, decrypt_final_read: bool) {
-    let expected_str = vec![
+    let expected_str = [
         "+-----+--------+----------------------------+",
         "| int | string | timestamp                  |",
         "+-----+--------+----------------------------+",
