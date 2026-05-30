@@ -1,15 +1,15 @@
 [workspace]
-members = ["parquet-key-management", "generate-test-files"]
 resolver = "2"
+members = ["generate-test-files", "parquet-key-management"]
 
 [workspace.package]
 version = "0.7.0"
-homepage = "https://github.com/G-Research/parquet-key-management-rs"
-repository = "https://github.com/G-Research/parquet-key-management-rs"
-readme = "README.md"
-license = "Apache-2.0"
 edition = "2021"
 rust-version = "1.88.0"
+readme = "README.md"
+homepage = "https://github.com/G-Research/parquet-key-management-rs"
+repository = "https://github.com/G-Research/parquet-key-management-rs"
+license = "Apache-2.0"
 
 [workspace.dependencies]
 arrow = { version = ">=57.2, <59", default-features = false }
