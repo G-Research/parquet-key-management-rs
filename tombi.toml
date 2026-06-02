@@ -1,0 +1,9 @@
+[format.rules]
+line-width = 120
+
+[[schemas]]
+toml-version = "v1.0.0"
+path = "tombi://www.schemastore.org/cargo.json"
+include = ["Cargo.toml", "**/Cargo.toml"]
+format.rules.array-values-order.enabled = false
+format.rules.table-keys-order.enabled = false
