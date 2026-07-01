@@ -201,6 +201,16 @@ impl TryInto<EncryptionConfiguration> for EncryptionOptions {
     type Error = DataFusionError;
 
     fn try_into(self) -> Result<EncryptionConfiguration, Self::Error> {
+        if self.data_key_length_bits != 128 {
+            return Err(DataFusionError::NotImplemented(
+                "Only 128 bit data keys are currently implemented".to_owned(),
+            ));
+        }
+        if !self.internal_key_material {
+            return Err(DataFusionError::NotImplemented(
+                "External key material is not yet implemented".to_owned(),
+            ));
+        }
         let mut builder = EncryptionConfiguration::builder(self.footer_key_id.clone())
             .set_double_wrapping(self.double_wrapping)
             .set_plaintext_footer(self.plaintext_footer)
