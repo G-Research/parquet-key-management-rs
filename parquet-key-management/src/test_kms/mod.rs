@@ -155,12 +155,17 @@ impl KmsClient for TestKmsClient {
         let wrapped_key = BASE64_STANDARD.decode(wrapped_key).map_err(|e| {
             ParquetError::General(format!("Error base64 decoding wrapped key: {e}"))
         })?;
+
+        let tag_len = key.algorithm().tag_len();
+        if wrapped_key.len() < NONCE_LEN + tag_len {
+            return Err(ParquetError::General("Wrapped key is too short".to_owned()));
+        }
+
         let nonce = ring::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
 
         let mut plaintext = Vec::with_capacity(wrapped_key.len() - NONCE_LEN);
         plaintext.extend_from_slice(&wrapped_key[NONCE_LEN..]);
 
-        let tag_len = key.algorithm().tag_len();
         key.open_in_place(nonce, Aad::from(aad), &mut plaintext)?;
         plaintext.resize(plaintext.len() - tag_len, 0u8);
 

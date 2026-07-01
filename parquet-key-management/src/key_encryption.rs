@@ -53,6 +53,12 @@ pub(crate) fn decrypt_encryption_key(
     })?;
     let kek = LessSafeKey::new(kek);
 
+    if encrypted_key.len() < NONCE_LEN + algorithm.tag_len() {
+        return Err(ParquetError::General(
+            "Encrypted data encryption key is too short".to_owned(),
+        ));
+    }
+
     let nonce = ring::aead::Nonce::try_assume_unique_for_key(&encrypted_key[..NONCE_LEN])?;
 
     let mut plaintext = Vec::with_capacity(encrypted_key.len() - NONCE_LEN);
@@ -78,5 +84,16 @@ mod tests {
         let decrypted_dek = decrypt_encryption_key(&encrypted_key, kek_id, kek_bytes).unwrap();
 
         assert_eq!(dek_bytes, decrypted_dek);
+    }
+
+    #[test]
+    fn test_decrypt_short_key_returns_error() {
+        let kek_bytes = "1234567890123452".as_bytes();
+        let kek_id = "1234567890123453".as_bytes();
+
+        for len in [0, 3, NONCE_LEN - 1] {
+            let wrapped = BASE64_STANDARD.encode(vec![0u8; len]);
+            assert!(decrypt_encryption_key(&wrapped, kek_id, kek_bytes).is_err());
+        }
     }
 }

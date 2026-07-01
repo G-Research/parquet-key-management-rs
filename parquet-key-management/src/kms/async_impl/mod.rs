@@ -179,6 +179,9 @@ use std::sync::Arc;
 ///             })?;
 ///             let master_key = self.get_key(master_key_identifier)?;
 ///             let aad = master_key_identifier.as_bytes();
+///             if wrapped_key.len() < NONCE_LEN + master_key.algorithm().tag_len() {
+///                 return Err(ParquetError::General("Wrapped key is too short".to_owned()));
+///             }
 ///             let nonce = ring::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
 ///
 ///             let mut plaintext = Vec::with_capacity(wrapped_key.len() - NONCE_LEN);
