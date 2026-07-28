@@ -112,6 +112,8 @@ jobs:
           restore-keys: cargo-cache-msrv-
       - name: Write Cargo.lock
         run: cp Cargo.lock.msrv Cargo.lock
+      - name: Check Cargo.lock.msrv satisfies requirements
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Install cargo-msrv
         run: cargo install --locked cargo-msrv
       - name: Verify MSRV
