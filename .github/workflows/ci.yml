@@ -99,6 +99,14 @@ jobs:
         run: ./ci/run_integration_tests.sh
 
   msrv:
+    # We maintain a Cargo.lock.msrv file with the minimum set of dependencies
+    # required. This is used to determine the minimum supported rust version (MSRV)
+    # and can be updated with:
+    #   rm Cargo.lock
+    #   cargo +nightly update -Z direct-minimal-versions
+    #   cargo +1.88.0 check --locked --all-features --manifest-path parquet-key-management/Cargo.toml
+    #   cp Cargo.lock Cargo.lock.msrv
+    # (the check command confirms that it builds, the cargo version used should match the expected msrv)
     name: Verify minimum supported Rust version
     runs-on: ubuntu-latest
     steps:
@@ -112,6 +120,8 @@ jobs:
           restore-keys: cargo-cache-msrv-
       - name: Write Cargo.lock
         run: cp Cargo.lock.msrv Cargo.lock
+      - name: Check Cargo.lock.msrv satisfies requirements
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: Install cargo-msrv
         run: cargo install --locked cargo-msrv
       - name: Verify MSRV
