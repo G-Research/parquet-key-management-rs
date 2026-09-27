@@ -617,6 +617,66 @@ mod tests {
     }
 
     #[test]
+    fn test_kms_client_caching_with_different_urls() {
+        let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+        let crypto_factory = CryptoFactory::new(kms_factory.clone());
+        // The KMS config is updated from the footer key metadata per file,
+        // so separate decryption properties are needed for each file
+        let decryption_props = || {
+            let config = DecryptionConfiguration::builder()
+                .set_read_kms_url(true)
+                .build();
+            crypto_factory
+                .file_decryption_properties(Arc::new(KmsConnectionConfig::default()), config)
+                .unwrap()
+        };
+
+        let dek = "1234567890123450".as_bytes().to_vec();
+        let kms = TestKmsClientFactory::with_default_keys()
+            .create_client(&Default::default())
+            .unwrap();
+        let wrapped_key = kms.wrap_key(&dek, "kc1").unwrap();
+
+        let footer_key_material = |url: &str| {
+            KeyMaterialBuilder::for_footer_key("123".to_owned(), url.to_owned())
+                .with_single_wrapped_key("kc1".to_owned(), wrapped_key.clone())
+                .build()
+                .unwrap()
+                .serialize()
+                .unwrap()
+        };
+        let key_material_1 = footer_key_material("https://example.com/kms1/");
+        let key_material_2 = footer_key_material("https://example.com/kms2/");
+
+        let expected_config = |url: &str| KmsConnectionConfigDetails {
+            kms_instance_id: "123".to_string(),
+            kms_instance_url: url.to_string(),
+            key_access_token: "DEFAULT".to_string(),
+            custom_kms_conf: Default::default(),
+        };
+        let expected_invocations = vec![
+            expected_config("https://example.com/kms1/"),
+            expected_config("https://example.com/kms2/"),
+        ];
+
+        decryption_props()
+            .footer_key(Some(key_material_1.as_bytes()))
+            .unwrap();
+        decryption_props()
+            .footer_key(Some(key_material_2.as_bytes()))
+            .unwrap();
+        // A new client should have been created for the second URL
+        assert_eq!(expected_invocations, kms_factory.invocations());
+        assert_eq!(2, crypto_factory.cache_stats().num_kms_clients);
+
+        decryption_props()
+            .footer_key(Some(key_material_1.as_bytes()))
+            .unwrap();
+        // The cached client for the first URL should be reused
+        assert_eq!(expected_invocations, kms_factory.invocations());
+    }
+
+    #[test]
     fn test_kms_client_expiration() {
         let time_controller = crate::kms_manager::mock_time::time_controller();
 
@@ -717,6 +777,7 @@ mod tests {
         let kms_config = Arc::new(
             KmsConnectionConfig::builder()
                 .set_kms_instance_id("DEFAULT".to_owned())
+                .set_kms_instance_url("DEFAULT".to_owned())
                 .build(),
         );
         let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())

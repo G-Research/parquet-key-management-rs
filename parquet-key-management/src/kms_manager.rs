@@ -55,6 +55,7 @@ impl KmsManager {
         let key = ClientKey::new(
             key_access_token.clone(),
             kms_connection_config.kms_instance_id().to_owned(),
+            kms_connection_config.kms_instance_url().to_owned(),
         );
         self.kms_client_cache
             .get_or_create(key, cache_lifetime, || {
@@ -198,13 +199,19 @@ where
 struct ClientKey {
     key_access_token: String,
     kms_instance_id: String,
+    kms_instance_url: String,
 }
 
 impl ClientKey {
-    pub fn new(key_access_token: String, kms_instance_id: String) -> Self {
+    pub fn new(
+        key_access_token: String,
+        kms_instance_id: String,
+        kms_instance_url: String,
+    ) -> Self {
         Self {
             key_access_token,
             kms_instance_id,
+            kms_instance_url,
         }
     }
 }
