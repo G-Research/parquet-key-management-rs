@@ -49,6 +49,7 @@ impl KmsManager {
         cache_lifetime: Option<Duration>,
     ) -> Result<KmsClientRef> {
         self.clear_expired_entries(cache_lifetime);
+        let kms_connection_config = kms_connection_config.with_defaults_filled();
         // Hold a read lock while the KMS is created to prevent a race condition where the token
         // could be updated after we read it but before the KMS client factory reads it.
         let key_access_token = kms_connection_config.read_key_access_token();
@@ -59,7 +60,8 @@ impl KmsManager {
         );
         self.kms_client_cache
             .get_or_create(key, cache_lifetime, || {
-                self.kms_client_factory.create_client(kms_connection_config)
+                self.kms_client_factory
+                    .create_client(&kms_connection_config)
             })
     }
 

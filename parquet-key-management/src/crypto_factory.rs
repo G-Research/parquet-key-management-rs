@@ -677,6 +677,41 @@ mod tests {
     }
 
     #[test]
+    fn test_kms_client_caching_with_default_instance() {
+        let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+        let crypto_factory = CryptoFactory::new(kms_factory.clone());
+        // Instance ID and URL are not set, so default values are used
+        let kms_config = Arc::new(KmsConnectionConfig::default());
+
+        let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
+            .set_double_wrapping(false)
+            .build()
+            .unwrap();
+        let encryption_props = crypto_factory
+            .file_encryption_properties(kms_config.clone(), &encryption_config)
+            .unwrap();
+
+        let decryption_props = crypto_factory
+            .file_decryption_properties(kms_config, Default::default())
+            .unwrap();
+        let footer_key = decryption_props
+            .footer_key(encryption_props.footer_key_metadata().map(|k| k.as_bytes()))
+            .unwrap();
+        assert_eq!(encryption_props.footer_key(), footer_key.as_slice());
+
+        // The factory should only see "DEFAULT" values, and the client
+        // created when writing should be reused when reading.
+        let expected_invocations = vec![KmsConnectionConfigDetails {
+            kms_instance_id: "DEFAULT".to_string(),
+            kms_instance_url: "DEFAULT".to_string(),
+            key_access_token: "DEFAULT".to_string(),
+            custom_kms_conf: Default::default(),
+        }];
+        assert_eq!(expected_invocations, kms_factory.invocations());
+        assert_eq!(1, crypto_factory.cache_stats().num_kms_clients);
+    }
+
+    #[test]
     fn test_kms_client_expiration() {
         let time_controller = crate::kms_manager::mock_time::time_controller();
 
@@ -777,7 +812,6 @@ mod tests {
         let kms_config = Arc::new(
             KmsConnectionConfig::builder()
                 .set_kms_instance_id("DEFAULT".to_owned())
-                .set_kms_instance_url("DEFAULT".to_owned())
                 .build(),
         );
         let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())

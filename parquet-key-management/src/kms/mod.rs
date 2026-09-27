@@ -4,6 +4,7 @@
 mod async_impl;
 
 use parquet::errors::Result;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -91,6 +92,21 @@ impl KmsConnectionConfig {
     pub(crate) fn set_kms_instance_url(&mut self, kms_instance_url: String) {
         self.kms_instance_url = kms_instance_url;
     }
+
+    /// Get this configuration with an empty KMS instance ID or URL replaced with "DEFAULT"
+    pub(crate) fn with_defaults_filled(&self) -> Cow<'_, Self> {
+        if !self.kms_instance_id.is_empty() && !self.kms_instance_url.is_empty() {
+            return Cow::Borrowed(self);
+        }
+        let mut config = self.clone();
+        if config.kms_instance_id.is_empty() {
+            config.kms_instance_id = "DEFAULT".to_owned();
+        }
+        if config.kms_instance_url.is_empty() {
+            config.kms_instance_url = "DEFAULT".to_owned();
+        }
+        Cow::Owned(config)
+    }
 }
 
 impl Default for KmsConnectionConfig {
@@ -168,7 +184,13 @@ impl Default for KmsConnectionConfigBuilder {
 
 /// Trait for factories that create KMS clients
 pub trait KmsClientFactory: Send + Sync {
-    /// Create a new [`KmsClient`] instance using the provided configuration
+    /// Create a new [`KmsClient`] instance using the provided configuration.
+    ///
+    /// If the KMS instance ID or URL were not provided, they will be set to "DEFAULT".
+    ///
+    /// Created clients are cached by the KMS instance ID, KMS instance URL and key access token.
+    /// Custom KMS configuration options are not part of the cache key, so if multiple
+    /// configurations differ only in their custom options, they will share the same client.
     fn create_client(&self, kms_connection_config: &KmsConnectionConfig) -> Result<KmsClientRef>;
 }
 
