@@ -97,7 +97,7 @@ impl FileEncryptionKeys {
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto_factory::{CryptoFactory, DecryptionConfiguration, EncryptionConfiguration};
+    use crate::crypto_factory::{CryptoFactory, EncryptionConfiguration};
     use crate::test_kms::TestKmsClientFactory;
     use std::sync::Arc;
 
@@ -114,5 +114,67 @@ mod tests {
         let debug = format!("{keys:?}");
         assert!(debug.contains("<redacted>"));
         assert!(!debug.contains(&format!("{:?}", keys.footer_key().key())));
+    }
+
+    #[cfg(feature = "parquet")]
+    #[test]
+    fn test_into_parquet_builder() {
+        use super::{EncryptionKey, FileEncryptionKeys};
+
+        let keys = FileEncryptionKeys::new(
+            EncryptionKey::new(b"0123456789012345".to_vec(), b"footer_metadata".to_vec()),
+            true,
+            vec![
+                (
+                    "x".to_owned(),
+                    EncryptionKey::new(b"1234567890123450".to_vec(), b"x_metadata".to_vec()),
+                ),
+                (
+                    "y".to_owned(),
+                    EncryptionKey::new(b"2345678901234501".to_vec(), b"y_metadata".to_vec()),
+                ),
+            ],
+        );
+
+        let properties = keys
+            .into_parquet_builder()
+            .with_aad_prefix(b"prefix".to_vec())
+            .build()
+            .unwrap();
+
+        assert!(!properties.encrypt_footer());
+        assert_eq!(properties.footer_key(), b"0123456789012345");
+        assert_eq!(
+            properties.footer_key_metadata().map(Vec::as_slice),
+            Some(b"footer_metadata".as_slice())
+        );
+        assert_eq!(
+            properties.aad_prefix().map(Vec::as_slice),
+            Some(b"prefix".as_slice())
+        );
+
+        let (column_names, column_keys, key_metadata) = properties.column_keys();
+        let mut columns: Vec<_> = column_names
+            .into_iter()
+            .zip(column_keys)
+            .zip(key_metadata)
+            .map(|((name, key), metadata)| (name, key, metadata))
+            .collect();
+        columns.sort();
+        assert_eq!(
+            columns,
+            vec![
+                (
+                    "x".to_owned(),
+                    b"1234567890123450".to_vec(),
+                    b"x_metadata".to_vec()
+                ),
+                (
+                    "y".to_owned(),
+                    b"2345678901234501".to_vec(),
+                    b"y_metadata".to_vec()
+                ),
+            ]
+        );
     }
 }
