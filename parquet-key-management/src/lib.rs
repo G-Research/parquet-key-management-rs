@@ -33,7 +33,8 @@
 //! `KmsClient` implementations are compatible.
 //!
 //! # Example of writing then reading an encrypted Parquet file
-//! ```
+#![cfg_attr(feature = "parquet", doc = "```")]
+#![cfg_attr(not(feature = "parquet"), doc = "```ignore")]
 //! use arrow_array::{ArrayRef, Float32Array, Int32Array, RecordBatch};
 //! use base64::prelude::BASE64_STANDARD;
 //! use base64::Engine;
@@ -43,7 +44,7 @@
 //!     CryptoFactory, DecryptionConfiguration, EncryptionConfigurationBuilder,
 //! };
 //! use parquet_key_management::kms::{KmsClient, KmsConnectionConfig};
-//! use parquet::errors::{ParquetError, Result};
+//! use parquet_key_management::errors::{Error, Result};
 //! use parquet::file::properties::WriterProperties;
 //! use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
 //! use ring::rand::{SecureRandom, SystemRandom};
@@ -144,10 +145,10 @@
 //!     /// Get the AES key corresponding to a key identifier
 //!     fn get_key(&self, master_key_identifier: &str) -> Result<LessSafeKey> {
 //!         let key = self.key_map.get(master_key_identifier).ok_or_else(|| {
-//!             ParquetError::General(format!("Invalid master key '{master_key_identifier}'"))
+//!             Error::General(format!("Invalid master key '{master_key_identifier}'"))
 //!         })?;
 //!         let key = UnboundKey::new(&AES_128_GCM, key)
-//!             .map_err(|e| ParquetError::General(format!("Error creating AES key '{e}'")))?;
+//!             .map_err(|e| Error::General(format!("Error creating AES key '{e}'")))?;
 //!         Ok(LessSafeKey::new(key))
 //!     }
 //! }
@@ -181,12 +182,12 @@
 //!     /// Take an encrypted key and decrypt it using the specified master key identifier
 //!     fn unwrap_key(&self, wrapped_key: &str, master_key_identifier: &str) -> Result<Vec<u8>> {
 //!         let wrapped_key = BASE64_STANDARD.decode(wrapped_key).map_err(|e| {
-//!             ParquetError::General(format!("Error base64 decoding wrapped key: {e}"))
+//!             Error::General(format!("Error base64 decoding wrapped key: {e}"))
 //!         })?;
 //!         let master_key = self.get_key(master_key_identifier)?;
 //!         let aad = master_key_identifier.as_bytes();
 //!         if wrapped_key.len() < NONCE_LEN + master_key.algorithm().tag_len() {
-//!             return Err(ParquetError::General("Wrapped key is too short".to_owned()));
+//!             return Err(Error::General("Wrapped key is too short".to_owned()));
 //!         }
 //!         let nonce = ring::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
 //!
@@ -200,7 +201,7 @@
 //!     }
 //! }
 //!
-//! # Ok::<(), parquet::errors::ParquetError>(())
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
 //! [`async_reader`]: https://docs.rs/parquet/latest/parquet/arrow/arrow_reader/index.html
@@ -211,6 +212,7 @@
 pub mod crypto_factory;
 #[cfg(feature = "datafusion")]
 pub mod datafusion;
+pub mod errors;
 mod key_encryption;
 pub mod key_material;
 mod key_unwrapper;

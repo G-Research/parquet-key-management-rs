@@ -312,7 +312,9 @@ fn kms_crypto_format() -> Result<FileFormatRef, DeltaTableError> {
         kms_connection_config,
     ));
 
-    let encryption_config = EncryptionConfiguration::builder("kf".into()).build()?;
+    let encryption_config = EncryptionConfiguration::builder("kf".into())
+        .build()
+        .map_err(parquet::errors::ParquetError::from)?;
     let decryption_config = DecryptionConfiguration::builder().build();
     let kms_options = KmsEncryptionFactoryOptions::new(encryption_config, decryption_config);
 

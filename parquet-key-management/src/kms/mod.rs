@@ -3,7 +3,7 @@
 #[cfg(feature = "async")]
 mod async_impl;
 
-use parquet::errors::Result;
+use crate::errors::Result;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock, RwLockReadGuard};

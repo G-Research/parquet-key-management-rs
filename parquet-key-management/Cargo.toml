@@ -16,7 +16,6 @@ all-features = true
 [dependencies]
 async-trait = { version = "0.1.89" }
 base64 = { version = "0.22", default-features = false, features = ["std"] }
-parquet = { workspace = true }
 ring = { version = "0.17", default-features = false, features = ["std"] }
 serde = { version = "1.0.221", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.60", default-features = false, features = ["std"] }
@@ -32,6 +31,7 @@ datafusion-common = { version = ">=52.1.0, <55", default-features = false, featu
 ], optional = true }
 futures = { workspace = true, optional = true }
 object_store = { version = ">=0.12.5, <0.14", default-features = false, optional = true }
+parquet = { workspace = true, optional = true }
 smol = { version = "2", default-features = false, optional = true }
 tokio = { workspace = true, optional = true }
 
@@ -54,12 +54,13 @@ deltalake-core = { git = "https://github.com/G-Research-Forks/delta-rs", tag = "
 ] }
 
 [features]
-default = []
+default = ["parquet"]
+parquet = ["dep:parquet"]
 async = ["dep:futures"]
 async-std = ["async", "dep:async-std"]
 smol = ["async", "dep:smol"]
 tokio = ["async", "dep:tokio"]
-datafusion = ["dep:datafusion-execution", "dep:datafusion-common", "dep:object_store"]
+datafusion = ["parquet", "dep:datafusion-execution", "dep:datafusion-common", "dep:object_store"]
 _test_utils = []
 
 [[test]]

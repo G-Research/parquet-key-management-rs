@@ -1,15 +1,17 @@
 //! The key-management tools API for building file encryption and decryption properties
 //! that work with a Key Management Server.
 
+use crate::errors::{Error, Result};
 use crate::key_unwrapper::KeyUnwrapper;
 use crate::key_wrapper::KeyWrapper;
 #[cfg(feature = "async")]
 use crate::kms::{reenter_async, AsyncKmsClientFactory, BridgeKmsClientFactory};
 use crate::kms::{KmsClientFactory, KmsConnectionConfig};
 use crate::kms_manager::KmsManager;
+#[cfg(feature = "parquet")]
 use parquet::encryption::decrypt::FileDecryptionProperties;
+#[cfg(feature = "parquet")]
 use parquet::encryption::encrypt::FileEncryptionProperties;
-use parquet::errors::{ParquetError, Result};
 use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -112,14 +114,14 @@ impl EncryptionConfigurationBuilder {
                 let prev_id = seen_columns.insert(col_name.clone(), master_key_id.clone());
                 match prev_id {
                     Some(prev_id) if &prev_id == master_key_id => {
-                        return Err(ParquetError::General(format!(
+                        return Err(Error::General(format!(
                             "Invalid encryption configuration. \
                             Column '{col_name}' is repeated multiple times for master key id \
                             '{master_key_id}'"
                         )));
                     }
                     Some(prev_id) => {
-                        return Err(ParquetError::General(format!(
+                        return Err(Error::General(format!(
                             "Invalid encryption configuration. \
                             Column '{col_name}' is configured to use multiple master key ids: \
                             '{master_key_id}' and '{prev_id}'"
@@ -250,7 +252,8 @@ impl Default for DecryptionConfigurationBuilder {
 ///
 /// The `CryptoFactory` can then be used to generate file encryption properties
 /// when writing an encrypted Parquet file:
-/// ```no_run
+#[cfg_attr(feature = "parquet", doc = "```no_run")]
+#[cfg_attr(not(feature = "parquet"), doc = "```ignore")]
 /// # use std::sync::Arc;
 /// # use parquet_key_management::crypto_factory::{CryptoFactory, EncryptionConfiguration};
 /// # use parquet_key_management::kms::KmsConnectionConfig;
@@ -259,11 +262,12 @@ impl Default for DecryptionConfigurationBuilder {
 /// let encryption_config = EncryptionConfiguration::builder("master_key_id".into()).build()?;
 /// let encryption_properties = crypto_factory.file_encryption_properties(
 ///     kms_connection_config, &encryption_config)?;
-/// # Ok::<(), parquet::errors::ParquetError>(())
+/// # Ok::<(), parquet_key_management::errors::Error>(())
 /// ```
 ///
 /// And file decryption properties can be constructed for reading an encrypted file:
-/// ```no_run
+#[cfg_attr(feature = "parquet", doc = "```no_run")]
+#[cfg_attr(not(feature = "parquet"), doc = "```ignore")]
 /// # use std::sync::Arc;
 /// # use parquet_key_management::crypto_factory::{CryptoFactory, DecryptionConfiguration};
 /// # use parquet_key_management::kms::KmsConnectionConfig;
@@ -272,7 +276,7 @@ impl Default for DecryptionConfigurationBuilder {
 /// let decryption_config = DecryptionConfiguration::default();
 /// let decryption_properties = crypto_factory.file_decryption_properties(
 ///     kms_connection_config, decryption_config)?;
-/// # Ok::<(), parquet::errors::ParquetError>(())
+/// # Ok::<(), parquet_key_management::errors::Error>(())
 /// ```
 ///
 /// A `CryptoFactory` can be reused multiple times to encrypt or decrypt many files,
@@ -366,6 +370,7 @@ impl CryptoFactory {
     }
 
     /// Create file decryption properties for a Parquet file
+    #[cfg(feature = "parquet")]
     pub fn file_decryption_properties(
         &self,
         kms_connection_config: Arc<KmsConnectionConfig>,
@@ -376,22 +381,23 @@ impl CryptoFactory {
             kms_connection_config,
             decryption_configuration,
         ));
-        FileDecryptionProperties::with_key_retriever(key_retriever).build()
+        Ok(FileDecryptionProperties::with_key_retriever(key_retriever).build()?)
     }
 
     /// Create file encryption properties for a Parquet file
+    #[cfg(feature = "parquet")]
     pub fn file_encryption_properties(
         &self,
         kms_connection_config: Arc<KmsConnectionConfig>,
         encryption_configuration: &EncryptionConfiguration,
     ) -> Result<Arc<FileEncryptionProperties>> {
         if !encryption_configuration.internal_key_material {
-            return Err(ParquetError::NYI(
+            return Err(Error::NotYetImplemented(
                 "External key material is not yet implemented".to_owned(),
             ));
         }
         if encryption_configuration.data_key_length_bits != 128 {
-            return Err(ParquetError::NYI(
+            return Err(Error::NotYetImplemented(
                 "Only 128 bit data keys are currently implemented".to_owned(),
             ));
         }
@@ -423,7 +429,7 @@ impl CryptoFactory {
             }
         }
 
-        builder.build()
+        Ok(builder.build()?)
     }
 
     fn generate_key(
@@ -459,7 +465,7 @@ impl EncryptionKey {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "parquet"))]
 mod tests {
     use super::*;
     use crate::key_material::KeyMaterialBuilder;
