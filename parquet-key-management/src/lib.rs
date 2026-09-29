@@ -212,6 +212,7 @@
 pub mod crypto_factory;
 #[cfg(feature = "datafusion")]
 pub mod datafusion;
+pub mod encryption_keys;
 pub mod errors;
 mod key_encryption;
 pub mod key_material;

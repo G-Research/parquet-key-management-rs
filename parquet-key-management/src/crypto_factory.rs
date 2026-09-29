@@ -1,6 +1,7 @@
 //! The key-management tools API for building file encryption and decryption properties
 //! that work with a Key Management Server.
 
+use crate::encryption_keys::{EncryptionKey, FileEncryptionKeys};
 use crate::errors::{Error, Result};
 use crate::key_unwrapper::KeyUnwrapper;
 use crate::key_wrapper::KeyWrapper;
@@ -389,17 +390,33 @@ impl CryptoFactory {
         kms_connection_config: Arc<KmsConnectionConfig>,
         decryption_configuration: DecryptionConfiguration,
     ) -> Result<Arc<FileDecryptionProperties>> {
-        let key_retriever = Arc::new(self.key_unwrapper(kms_connection_config, decryption_configuration)?);
+        let key_retriever =
+            Arc::new(self.key_unwrapper(kms_connection_config, decryption_configuration)?);
         Ok(FileDecryptionProperties::with_key_retriever(key_retriever).build()?)
     }
 
     /// Create file encryption properties for a Parquet file
+    ///
+    /// To set further encryption options not managed by the [`CryptoFactory`],
+    /// use [`file_encryption_keys`](Self::file_encryption_keys) and
+    /// [`FileEncryptionKeys::into_parquet_builder`] instead.
     #[cfg(feature = "parquet")]
     pub fn file_encryption_properties(
         &self,
         kms_connection_config: Arc<KmsConnectionConfig>,
         encryption_configuration: &EncryptionConfiguration,
     ) -> Result<Arc<FileEncryptionProperties>> {
+        let encryption_keys =
+            self.file_encryption_keys(kms_connection_config, encryption_configuration)?;
+        Ok(encryption_keys.into_parquet_builder().build()?)
+    }
+
+    /// Generate the encryption keys and key metadata required to encrypt a Parquet file.
+    pub fn file_encryption_keys(
+        &self,
+        kms_connection_config: Arc<KmsConnectionConfig>,
+        encryption_configuration: &EncryptionConfiguration,
+    ) -> Result<FileEncryptionKeys> {
         if !encryption_configuration.internal_key_material {
             return Err(Error::NotYetImplemented(
                 "External key material is not yet implemented".to_owned(),
@@ -423,22 +440,19 @@ impl CryptoFactory {
             &mut key_wrapper,
         )?;
 
-        let mut builder = FileEncryptionProperties::builder(footer_key.key)
-            .with_footer_key_metadata(footer_key.metadata)
-            .with_plaintext_footer(encryption_configuration.plaintext_footer);
-
+        let mut column_keys = Vec::new();
         for (master_key_id, column_paths) in &encryption_configuration.column_key_ids {
             for column_path in column_paths {
                 let column_key = self.generate_key(master_key_id, false, &mut key_wrapper)?;
-                builder = builder.with_column_key_and_metadata(
-                    column_path,
-                    column_key.key,
-                    column_key.metadata,
-                );
+                column_keys.push((column_path.clone(), column_key));
             }
         }
 
-        Ok(builder.build()?)
+        Ok(FileEncryptionKeys::new(
+            footer_key,
+            encryption_configuration.plaintext_footer,
+            column_keys,
+        ))
     }
 
     fn generate_key(
@@ -460,17 +474,6 @@ impl CryptoFactory {
     #[cfg(test)]
     pub(crate) fn cache_stats(&self) -> crate::kms_manager::CacheStats {
         self.kms_manager.cache_stats()
-    }
-}
-
-struct EncryptionKey {
-    key: Vec<u8>,
-    metadata: Vec<u8>,
-}
-
-impl EncryptionKey {
-    pub fn new(key: Vec<u8>, metadata: Vec<u8>) -> Self {
-        Self { key, metadata }
     }
 }
 
