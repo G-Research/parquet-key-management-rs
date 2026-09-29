@@ -369,6 +369,19 @@ impl CryptoFactory {
         Self::new_async(reenter_async::TokioReenterAsync, kms_client_factory)
     }
 
+    /// Get a KeyUnwrapper to use for reading a Parquet file
+    pub fn key_unwrapper(
+        &self,
+        kms_connection_config: Arc<KmsConnectionConfig>,
+        decryption_configuration: DecryptionConfiguration,
+    ) -> Result<KeyUnwrapper> {
+        Ok(KeyUnwrapper::new(
+            self.kms_manager.clone(),
+            kms_connection_config,
+            decryption_configuration,
+        ))
+    }
+
     /// Create file decryption properties for a Parquet file
     #[cfg(feature = "parquet")]
     pub fn file_decryption_properties(
@@ -376,11 +389,7 @@ impl CryptoFactory {
         kms_connection_config: Arc<KmsConnectionConfig>,
         decryption_configuration: DecryptionConfiguration,
     ) -> Result<Arc<FileDecryptionProperties>> {
-        let key_retriever = Arc::new(KeyUnwrapper::new(
-            self.kms_manager.clone(),
-            kms_connection_config,
-            decryption_configuration,
-        ));
+        let key_retriever = Arc::new(self.key_unwrapper(kms_connection_config, decryption_configuration)?);
         Ok(FileDecryptionProperties::with_key_retriever(key_retriever).build()?)
     }
 

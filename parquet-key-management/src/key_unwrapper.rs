@@ -12,7 +12,7 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc, RwLock};
 
 /// Unwraps (decrypts) key encryption keys and data encryption keys using a KMS
-pub(crate) struct KeyUnwrapper {
+pub struct KeyUnwrapper {
     kms_manager: Arc<KmsManager>,
     kms_connection_config: RwLock<Arc<KmsConnectionConfig>>,
     decryption_configuration: DecryptionConfiguration,
@@ -20,7 +20,7 @@ pub(crate) struct KeyUnwrapper {
 }
 
 impl KeyUnwrapper {
-    pub fn new(
+    pub(crate) fn new(
         kms_manager: Arc<KmsManager>,
         kms_connection_config: Arc<KmsConnectionConfig>,
         decryption_configuration: DecryptionConfiguration,
@@ -116,7 +116,8 @@ impl KeyUnwrapper {
         Ok(())
     }
 
-    fn unwrap_key(&self, key_metadata: &[u8]) -> Result<Vec<u8>> {
+    /// Unwrap an encrypted key using a KMS
+    pub fn unwrap_key(&self, key_metadata: &[u8]) -> Result<Vec<u8>> {
         let key_material = std::str::from_utf8(key_metadata)
             .map_err(|e| Error::General(format!("Key metadata is not valid UTF-8: {e}")))?;
         let key_material = KeyMaterial::deserialize(key_material)?;

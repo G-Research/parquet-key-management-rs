@@ -215,7 +215,7 @@ pub mod datafusion;
 pub mod errors;
 mod key_encryption;
 pub mod key_material;
-mod key_unwrapper;
+pub mod key_unwrapper;
 mod key_wrapper;
 pub mod kms;
 mod kms_manager;
