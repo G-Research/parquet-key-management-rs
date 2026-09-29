@@ -73,6 +73,8 @@ impl FileEncryptionKeys {
     }
 
     /// Column-specific encryption keys, as pairs of column path and key
+    ///
+    /// Column paths are in dot-separated format for nested columns.
     pub fn column_keys(&self) -> impl Iterator<Item = (&str, &EncryptionKey)> {
         self.column_keys
             .iter()

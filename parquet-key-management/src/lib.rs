@@ -10,26 +10,51 @@
 //! keys (KEKs) that are then encrypted with MEKs, to reduce KMS interactions.
 //!
 //! # Usage
-//! Using this module requires defining your own type that implements the
+//! Using this crate requires defining your own type that implements the
 //! [`KmsClient`](kms::KmsClient) trait and interacts with your organization's KMS.
+//! This `KmsClient` is then used by a [`CryptoFactory`](crypto_factory::CryptoFactory),
+//! which generates and wraps encryption keys when writing files,
+//! and unwraps them when reading files.
 //!
-//! This `KmsClient` can then be used by the
-//! [`CryptoFactory`](crypto_factory::CryptoFactory) type to generate
-//! [`FileEncryptionProperties`](parquet::encryption::encrypt::FileEncryptionProperties)
-//! for writing encrypted Parquet files and
-//! [`FileDecryptionProperties`](parquet::encryption::decrypt::FileDecryptionProperties)
-//! for reading files.
+//! ## `parquet` crate integration
+//! The [`CryptoFactory`](crypto_factory::CryptoFactory) can directly generate
+//! [`FileEncryptionProperties`] for writing encrypted Parquet files with the
+//! [`parquet`](https://crates.io/crates/parquet) crate, and
+//! [`FileDecryptionProperties`] for reading them.
+//! This requires the `parquet` feature, which is enabled by default.
+//! See the example below.
+//!
+//! To set further encryption options, such as an AAD prefix, use
+//! [`CryptoFactory::file_encryption_keys`](crypto_factory::CryptoFactory::file_encryption_keys)
+//! followed by [`FileEncryptionKeys::into_parquet_builder`](encryption_keys::FileEncryptionKeys::into_parquet_builder).
+//!
+//! ## Use with other Parquet implementations
+//! This crate doesn't depend on any particular Parquet implementation
+//! and the `parquet` feature can be disabled.
+//!
+//! * When writing, [`CryptoFactory::file_encryption_keys`](crypto_factory::CryptoFactory::file_encryption_keys)
+//!   returns [`FileEncryptionKeys`](encryption_keys::FileEncryptionKeys),
+//!   containing the footer key, column keys and their serialized key metadata.
+//! * When reading, [`CryptoFactory::key_unwrapper`](crypto_factory::CryptoFactory::key_unwrapper)
+//!   returns a [`KeyUnwrapper`](key_unwrapper::KeyUnwrapper), whose
+//!   [`unwrap_key`](key_unwrapper::KeyUnwrapper::unwrap_key) method takes the key metadata
+//!   stored in a Parquet file and returns the decrypted key.
 //!
 //! # `async` usage (`async` feature)
-//! This module also provides an [`AsyncKmsClient`](kms::AsyncKmsClient) trait that can be used
-//! with the [`async_reader`] and [`async_writer`] modules.
+//! This crate also provides an [`AsyncKmsClient`](kms::AsyncKmsClient) trait for KMS clients that
+//! need to make asynchronous requests, which can be used with the `parquet` crate's
+//! [`async_reader`] and [`async_writer`] modules.
+//! The `async-std`, `smol` and `tokio` features provide support for those runtimes.
+//! See the example on [`AsyncKmsClient`](kms::AsyncKmsClient).
 //!
-//! See example on [`AsyncKmsClient`](kms::AsyncKmsClient).
+//! # DataFusion integration (`datafusion` feature)
+//! The `datafusion` module provides an `EncryptionFactory` implementation for reading and
+//! writing encrypted Parquet with [Apache DataFusion](https://datafusion.apache.org/).
 //!
 //! # Compatibility
 //! The encryption key metadata that is stored in the Parquet file is compatible with other Parquet
-//! implementations (PyArrow and parquet-java for example), so that files encrypted with this
-//! module may be decrypted by those implementations, and vice versa, as long as the
+//! implementations (PyArrow and parquet-java for example). Files encrypted with this
+//! crate may be decrypted by those implementations, and vice versa, as long as the
 //! `KmsClient` implementations are compatible.
 //!
 //! # Example of writing then reading an encrypted Parquet file
@@ -204,9 +229,22 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! [`async_reader`]: https://docs.rs/parquet/latest/parquet/arrow/arrow_reader/index.html
+//! [`async_reader`]: https://docs.rs/parquet/latest/parquet/arrow/async_reader/index.html
 //! [`async_writer`]: https://docs.rs/parquet/latest/parquet/arrow/async_writer/index.html
-
+//! [`FileEncryptionProperties`]: https://docs.rs/parquet/latest/parquet/encryption/encrypt/struct.FileEncryptionProperties.html
+//! [`FileDecryptionProperties`]: https://docs.rs/parquet/latest/parquet/encryption/decrypt/struct.FileDecryptionProperties.html
+// Some doc links refer to feature-gated items. These are only checked when building docs
+// with all features enabled, and will be broken links otherwise.
+#![cfg_attr(
+    not(all(
+        feature = "parquet",
+        feature = "async",
+        feature = "async-std",
+        feature = "smol",
+        feature = "tokio"
+    )),
+    allow(rustdoc::broken_intra_doc_links)
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod crypto_factory;

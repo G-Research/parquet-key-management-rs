@@ -12,6 +12,10 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc, RwLock};
 
 /// Unwraps (decrypts) key encryption keys and data encryption keys using a KMS
+///
+/// Caches key encryption keys, so one instance should be shared.
+/// Key encryption key ids must be globally unique, so this can be shared
+/// across multiple files.
 pub struct KeyUnwrapper {
     kms_manager: Arc<KmsManager>,
     kms_connection_config: RwLock<Arc<KmsConnectionConfig>>,
@@ -117,6 +121,13 @@ impl KeyUnwrapper {
     }
 
     /// Unwrap an encrypted key using a KMS
+    ///
+    /// Takes the key metadata bytes from a Parquet file and returns
+    /// a decrypted data encryption key.
+    ///
+    /// This should be called on the footer key before unwrapping
+    /// column keys, as the footer key metadata may contain the details
+    /// of the KMS URL and KMS ID to use.
     pub fn unwrap_key(&self, key_metadata: &[u8]) -> Result<Vec<u8>> {
         let key_material = std::str::from_utf8(key_metadata)
             .map_err(|e| Error::General(format!("Key metadata is not valid UTF-8: {e}")))?;
