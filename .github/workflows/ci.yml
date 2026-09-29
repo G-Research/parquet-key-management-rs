@@ -100,6 +100,23 @@ jobs:
       - name: Integration Test
         run: ./ci/run_integration_tests.sh
 
+  feature-check:
+    name: Check feature combinations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - name: Cache cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: |
+            ~/.cargo
+          key: cargo-cache-feature-check-${{ hashFiles('Cargo.toml') }}
+          restore-keys: cargo-cache-feature-check-
+      - name: Install cargo-hack
+        run: cargo install --locked cargo-hack
+      - name: Check each feature
+        run: cargo hack check --each-feature --no-dev-deps --package parquet-key-management
+
   msrv:
     # We maintain a Cargo.lock.msrv file with the minimum set of dependencies
     # required. This is used to determine the minimum supported rust version (MSRV)
@@ -141,6 +158,7 @@ jobs:
       - lint-toml
       - docs
       - test
+      - feature-check
       - msrv
     env:
       RESULTS: ${{ join(needs.*.result, ',') }}
@@ -148,12 +166,12 @@ jobs:
     steps:
       - name: "Success"
         # we expect all required jobs to have success result
-        if: env.RESULTS == 'success,success,success,success,success'
+        if: env.RESULTS == 'success,success,success,success,success,success'
         run: true
         shell: bash
       - name: "Failure"
         # we expect all required jobs to have success result, fail otherwise
-        if: env.RESULTS != 'success,success,success,success,success'
+        if: env.RESULTS != 'success,success,success,success,success,success'
         run: false
         shell: bash
 
