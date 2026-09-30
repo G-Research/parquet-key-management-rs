@@ -29,9 +29,15 @@ pub type KmsClientRef = Arc<dyn KmsClient>;
 /// Holds configuration options required to connect to a KMS
 #[derive(Clone, Debug)]
 pub struct KmsConnectionConfig {
+    /// The URL of the KMS to connect to. May be set to "DEFAULT" before being passed to a
+    /// KmsClientFactory if it hasn't been set, to indicate that the default KMS URL should be used.
     kms_instance_url: String,
+    /// An identifier for the KMS to connect to. May be set to "DEFAULT" before being passed to a
+    /// KmsClientFactory if it hasn't been set, to indicate that the default identifier should be used.
     kms_instance_id: String,
+    /// A refreshable access token to use to connect to the KMS.
     key_access_token: Arc<RwLock<String>>,
+    /// Additional configuration options for the KMS.
     custom_kms_conf: HashMap<String, String>,
 }
 

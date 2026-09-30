@@ -181,6 +181,7 @@ impl EncryptionConfigurationBuilder {
 #[derive(Clone, Debug)]
 pub struct DecryptionConfiguration {
     cache_lifetime: Option<Duration>,
+    read_kms_url: bool,
 }
 
 impl DecryptionConfiguration {
@@ -194,6 +195,14 @@ impl DecryptionConfiguration {
     pub fn cache_lifetime(&self) -> Option<Duration> {
         self.cache_lifetime
     }
+
+    /// Whether the KMS instance URL should be read from Parquet key material if it is
+    /// not configured in the [`KmsConnectionConfig`].
+    /// This should only be enabled when the KMS implementation validates the URL it
+    /// receives, to ensure a KMS access token isn't sent to a malicious URL.
+    pub fn read_kms_url(&self) -> bool {
+        self.read_kms_url
+    }
 }
 
 impl Default for DecryptionConfiguration {
@@ -205,6 +214,7 @@ impl Default for DecryptionConfiguration {
 /// Builder for a Parquet [`DecryptionConfiguration`].
 pub struct DecryptionConfigurationBuilder {
     cache_lifetime: Option<Duration>,
+    read_kms_url: bool,
 }
 
 impl DecryptionConfigurationBuilder {
@@ -212,6 +222,7 @@ impl DecryptionConfigurationBuilder {
     pub fn new() -> Self {
         Self {
             cache_lifetime: Some(Duration::from_secs(600)),
+            read_kms_url: false,
         }
     }
 
@@ -219,6 +230,7 @@ impl DecryptionConfigurationBuilder {
     pub fn build(self) -> DecryptionConfiguration {
         DecryptionConfiguration {
             cache_lifetime: self.cache_lifetime,
+            read_kms_url: self.read_kms_url,
         }
     }
 
@@ -226,6 +238,16 @@ impl DecryptionConfigurationBuilder {
     /// and KMS clients. When None, objects are cached indefinitely.
     pub fn set_cache_lifetime(mut self, cache_lifetime: Option<Duration>) -> Self {
         self.cache_lifetime = cache_lifetime;
+        self
+    }
+
+    /// Set whether the KMS instance URL should be read from Parquet key material if it is
+    /// not configured in the [`KmsConnectionConfig`].
+    /// This should only be enabled when the KMS implementation validates the URL it
+    /// receives, to ensure a KMS access token isn't sent to a malicious URL.
+    /// Defaults to false.
+    pub fn set_read_kms_url(mut self, read_kms_url: bool) -> Self {
+        self.read_kms_url = read_kms_url;
         self
     }
 }
@@ -540,10 +562,11 @@ mod tests {
             .unwrap();
         let serialized_key_material = key_material.serialize().unwrap();
 
-        // Default config with ID and URL set from the footer key material
+        // Default config with ID set from the footer key material.
+        // The URL isn't read from key material by default.
         let default_config = KmsConnectionConfigDetails {
             kms_instance_id: "123".to_string(),
-            kms_instance_url: "https://example.com".to_string(),
+            kms_instance_url: "DEFAULT".to_string(),
             key_access_token: "DEFAULT".to_string(),
             custom_kms_conf: Default::default(),
         };
@@ -551,7 +574,7 @@ mod tests {
         // Expected config after the access token refresh
         let refreshed_config = KmsConnectionConfigDetails {
             kms_instance_id: "123".to_string(),
-            kms_instance_url: "https://example.com".to_string(),
+            kms_instance_url: "DEFAULT".to_string(),
             key_access_token: "super_secret".to_string(),
             custom_kms_conf: Default::default(),
         };
@@ -918,7 +941,13 @@ mod tests {
             .set_custom_kms_conf_option("test_key".to_owned(), "test_value_2".to_owned())
             .build();
 
-        let details = get_kms_connection_config_for_decryption(decryption_kms_config);
+        // Enable reading the URL from key material to check the provided config takes precedence
+        let decryption_config = DecryptionConfiguration::builder()
+            .set_read_kms_url(true)
+            .build();
+
+        let details =
+            get_kms_connection_config_for_decryption(decryption_kms_config, decryption_config);
 
         assert_eq!(details.kms_instance_id, "456");
         assert_eq!(details.kms_instance_url, "https://example.com/kms2/");
@@ -930,18 +959,43 @@ mod tests {
     #[test]
     fn test_get_kms_client_using_config_from_file() {
         // When KMS config doesn't have the instance ID and URL,
-        // they should be retrieved from the file metadata.
+        // they should be retrieved from the file metadata if reading the URL is enabled.
         // Other properties like the access key and custom configuration can only be provided
         // at decryption time.
         let decryption_kms_config = KmsConnectionConfig::builder()
             .set_key_access_token("secret_2".to_owned())
             .set_custom_kms_conf_option("test_key".to_owned(), "test_value_2".to_owned())
             .build();
+        let decryption_config = DecryptionConfiguration::builder()
+            .set_read_kms_url(true)
+            .build();
 
-        let details = get_kms_connection_config_for_decryption(decryption_kms_config);
+        let details =
+            get_kms_connection_config_for_decryption(decryption_kms_config, decryption_config);
 
         assert_eq!(details.kms_instance_id, "123");
         assert_eq!(details.kms_instance_url, "https://example.com/kms1/");
+        assert_eq!(details.key_access_token, "secret_2");
+        let expected_conf = HashMap::from([("test_key".to_owned(), "test_value_2".to_owned())]);
+        assert_eq!(details.custom_kms_conf, expected_conf);
+    }
+
+    #[test]
+    fn test_get_kms_client_without_reading_kms_url_from_file() {
+        // By default, the KMS instance URL in the file metadata is ignored
+        // and the default URL is used, but the instance ID is still read from the file.
+        let decryption_kms_config = KmsConnectionConfig::builder()
+            .set_key_access_token("secret_2".to_owned())
+            .set_custom_kms_conf_option("test_key".to_owned(), "test_value_2".to_owned())
+            .build();
+
+        let details = get_kms_connection_config_for_decryption(
+            decryption_kms_config,
+            DecryptionConfiguration::default(),
+        );
+
+        assert_eq!(details.kms_instance_id, "123");
+        assert_eq!(details.kms_instance_url, "DEFAULT");
         assert_eq!(details.key_access_token, "secret_2");
         let expected_conf = HashMap::from([("test_key".to_owned(), "test_value_2".to_owned())]);
         assert_eq!(details.custom_kms_conf, expected_conf);
@@ -976,6 +1030,7 @@ mod tests {
 
     fn get_kms_connection_config_for_decryption(
         decryption_kms_config: KmsConnectionConfig,
+        decryption_config: DecryptionConfiguration,
     ) -> KmsConnectionConfigDetails {
         let encryption_kms_config = Arc::new(
             KmsConnectionConfig::builder()
@@ -1005,7 +1060,7 @@ mod tests {
 
         let decryption_kms_config = Arc::new(decryption_kms_config);
         let decryption_properties = crypto_factory
-            .file_decryption_properties(decryption_kms_config, Default::default())
+            .file_decryption_properties(decryption_kms_config, decryption_config)
             .unwrap();
 
         let _ = decryption_properties
