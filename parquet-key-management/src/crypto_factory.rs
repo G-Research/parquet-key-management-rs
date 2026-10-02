@@ -301,7 +301,8 @@ impl Default for DecryptionConfigurationBuilder {
 /// but the same encryption properties should not be reused between different files.
 ///
 /// The `KmsClientFactory` will be used to create KMS clients as required,
-/// and these will be internally cached based on the KMS instance ID and the key access token.
+/// and these will be internally cached based on the KMS instance ID, KMS instance URL
+/// and the key access token.
 /// This means that if the key access token is changed using
 /// [`KmsConnectionConfig::refresh_key_access_token`],
 /// new `KmsClient` instances will be created using the new token rather than reusing
