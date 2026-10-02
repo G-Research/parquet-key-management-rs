@@ -1025,6 +1025,62 @@ mod tests {
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
     }
 
+    /// KEKs wrapped by one KMS instance must not be reused when encrypting with another instance
+    #[test]
+    fn test_encryption_key_encryption_key_caching_with_different_urls() {
+        let kms_config = |url: &str| {
+            Arc::new(
+                KmsConnectionConfig::builder()
+                    .set_kms_instance_id("123".to_owned())
+                    .set_kms_instance_url(url.to_owned())
+                    .build(),
+            )
+        };
+        let kms_config_1 = kms_config("https://example.com/kms1/");
+        let kms_config_2 = kms_config("https://example.com/kms2/");
+        let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
+            .set_double_wrapping(true)
+            .build()
+            .unwrap();
+
+        let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+        let crypto_factory = CryptoFactory::new(kms_factory.clone());
+
+        let generate_encryption_props = |kms_config: &Arc<KmsConnectionConfig>| {
+            let _ = crypto_factory
+                .file_encryption_properties(kms_config.clone(), &encryption_config)
+                .unwrap();
+        };
+
+        generate_encryption_props(&kms_config_1);
+        assert_eq!(1, kms_factory.keys_wrapped());
+        assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
+
+        // A new KEK must be generated and wrapped by the second KMS instance
+        generate_encryption_props(&kms_config_2);
+        assert_eq!(2, kms_factory.keys_wrapped());
+        assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
+        let expected_config = |url: &str| KmsConnectionConfigDetails {
+            kms_instance_id: "123".to_string(),
+            kms_instance_url: url.to_string(),
+            key_access_token: "DEFAULT".to_string(),
+            custom_kms_conf: Default::default(),
+        };
+        assert_eq!(
+            vec![
+                expected_config("https://example.com/kms1/"),
+                expected_config("https://example.com/kms2/"),
+            ],
+            kms_factory.invocations()
+        );
+
+        // Cached KEKs are reused for each instance
+        generate_encryption_props(&kms_config_1);
+        generate_encryption_props(&kms_config_2);
+        assert_eq!(2, kms_factory.keys_wrapped());
+        assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
+    }
+
     #[test]
     fn test_get_kms_client_using_provided_config() {
         // Connection configuration options provided at read time should take precedence over

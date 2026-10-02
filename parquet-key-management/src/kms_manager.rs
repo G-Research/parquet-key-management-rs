@@ -25,9 +25,9 @@ pub(crate) type KekWriteCache = Arc<Mutex<HashMap<String, KeyEncryptionKey>>>;
 /// Manages caching KMS clients and KEK caches
 pub(crate) struct KmsManager {
     kms_client_factory: Box<dyn KmsClientFactory>,
-    kms_client_cache: ExpiringCache<ClientKey, KmsClientRef>,
+    kms_client_cache: ExpiringCache<KmsInstanceKey, KmsClientRef>,
     kek_read_caches: ExpiringCache<KekCacheKey, KekReadCache>,
-    kek_write_caches: ExpiringCache<KekCacheKey, KekWriteCache>,
+    kek_write_caches: ExpiringCache<KmsInstanceKey, KekWriteCache>,
 }
 
 impl KmsManager {
@@ -53,7 +53,7 @@ impl KmsManager {
         // Hold a read lock while the KMS is created to prevent a race condition where the token
         // could be updated after we read it but before the KMS client factory reads it.
         let key_access_token = kms_connection_config.read_key_access_token();
-        let key = ClientKey::new(
+        let key = KmsInstanceKey::new(
             key_access_token.clone(),
             kms_connection_config.kms_instance_id().to_owned(),
             kms_connection_config.kms_instance_url().to_owned(),
@@ -85,7 +85,13 @@ impl KmsManager {
         cache_lifetime: Option<Duration>,
     ) -> KekWriteCache {
         self.clear_expired_entries(cache_lifetime);
-        let key = KekCacheKey::new(kms_connection_config.key_access_token().clone());
+        // KEKs are wrapped by a specific KMS instance, so they can't be shared between instances
+        let kms_connection_config = kms_connection_config.with_defaults_filled();
+        let key = KmsInstanceKey::new(
+            kms_connection_config.key_access_token().clone(),
+            kms_connection_config.kms_instance_id().to_owned(),
+            kms_connection_config.kms_instance_url().to_owned(),
+        );
         self.kek_write_caches
             .get_or_create(key, cache_lifetime, || {
                 Ok(Arc::new(Mutex::new(Default::default())))
@@ -196,15 +202,15 @@ where
     }
 }
 
-/// Key used to cache KMS clients
+/// Key used to cache KMS clients and KEK write caches
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct ClientKey {
+struct KmsInstanceKey {
     key_access_token: String,
     kms_instance_id: String,
     kms_instance_url: String,
 }
 
-impl ClientKey {
+impl KmsInstanceKey {
     pub fn new(
         key_access_token: String,
         kms_instance_id: String,
@@ -218,7 +224,8 @@ impl ClientKey {
     }
 }
 
-// Key used to cache KEK caches
+// Key used to cache KEK read caches.
+// KEK IDs are globally unique, so read caches can be shared between KMS instances.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 struct KekCacheKey {
     key_access_token: String,
