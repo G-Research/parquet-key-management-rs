@@ -81,6 +81,8 @@ impl KeyUnwrapper {
 
     /// If the KMS instance ID or URL weren't provided in the connection configuration,
     /// try to read them from the footer key metadata.
+    /// The KMS instance URL is only read from the footer key metadata if reading it is enabled
+    /// in the decryption configuration, otherwise the default URL is used.
     /// When a configuration value is present in both the file metadata and connection configuration,
     /// the value from the connection configuration takes precedence.
     fn update_kms_config_from_footer_metadata(
@@ -108,13 +110,17 @@ impl KeyUnwrapper {
         }
 
         if mut_config.kms_instance_url().is_empty() {
-            if kms_instance_url.is_empty() {
-                return Err(Error::General(
-                    "KMS instance URL not set in connection configuration or footer key metadata"
-                        .to_owned(),
-                ));
+            if self.decryption_configuration.read_kms_url() {
+                if kms_instance_url.is_empty() {
+                    return Err(Error::General(
+                        "KMS instance URL not set in connection configuration or footer key metadata"
+                            .to_owned(),
+                    ));
+                }
+                mut_config.set_kms_instance_url(kms_instance_url.to_owned());
+            } else {
+                mut_config.set_kms_instance_url("DEFAULT".to_owned());
             }
-            mut_config.set_kms_instance_url(kms_instance_url.to_owned());
         }
 
         Ok(())

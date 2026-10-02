@@ -119,6 +119,11 @@ extensions_options! {
     pub struct DecryptionOptions {
         /// How long in seconds to cache objects used during decryption
         pub cache_lifetime_s: Option<u64>, default = None
+        /// Whether the KMS instance URL should be read from Parquet key material if it is
+        /// not configured in the KMS connection configuration.
+        /// This should only be enabled when the KMS implementation validates the URL it
+        /// receives, to ensure a KMS access token isn't sent to a malicious URL.
+        pub read_kms_url: bool, default = false
     }
 }
 
@@ -137,7 +142,7 @@ impl PartialEq for EncryptionOptions {
 
 impl PartialEq for DecryptionOptions {
     fn eq(&self, other: &Self) -> bool {
-        self.cache_lifetime_s == other.cache_lifetime_s
+        self.cache_lifetime_s == other.cache_lifetime_s && self.read_kms_url == other.read_kms_url
     }
 }
 
@@ -227,6 +232,7 @@ impl From<DecryptionConfiguration> for DecryptionOptions {
     fn from(config: DecryptionConfiguration) -> Self {
         DecryptionOptions {
             cache_lifetime_s: config.cache_lifetime().map(|lifetime| lifetime.as_secs()),
+            read_kms_url: config.read_kms_url(),
         }
     }
 }
@@ -237,6 +243,7 @@ impl TryInto<DecryptionConfiguration> for DecryptionOptions {
     fn try_into(self) -> Result<DecryptionConfiguration, Self::Error> {
         Ok(DecryptionConfiguration::builder()
             .set_cache_lifetime(self.cache_lifetime_s.map(Duration::from_secs))
+            .set_read_kms_url(self.read_kms_url)
             .build())
     }
 }
@@ -343,6 +350,7 @@ mod tests {
 
         let decryption_config: DecryptionConfiguration = options.decryption.try_into().unwrap();
         assert_eq!(decryption_config.cache_lifetime(), None);
+        assert!(!decryption_config.read_kms_url());
     }
 
     #[test]
@@ -368,6 +376,7 @@ mod tests {
             .unwrap();
         let decryption_config = DecryptionConfiguration::builder()
             .set_cache_lifetime(Some(Duration::from_secs(120)))
+            .set_read_kms_url(true)
             .build();
         let options = KmsEncryptionFactoryOptions::new(encryption_config, decryption_config);
 
@@ -402,5 +411,6 @@ mod tests {
             decryption_config_out.cache_lifetime(),
             Some(Duration::from_secs(120))
         );
+        assert!(decryption_config_out.read_kms_url());
     }
 }
