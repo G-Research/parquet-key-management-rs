@@ -14,7 +14,8 @@ use std::sync::Arc;
 /// This should be implemented by user code for integration with your KMS.
 ///
 /// # Example of writing then reading an encrypted Parquet file asynchronously
-/// ```
+#[cfg_attr(feature = "parquet", doc = "```")]
+#[cfg_attr(not(feature = "parquet"), doc = "```ignore")]
 /// use arrow_array::{ArrayRef, Float32Array, Int32Array, RecordBatch};
 /// use base64::prelude::BASE64_STANDARD;
 /// use base64::Engine;
