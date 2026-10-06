@@ -13,9 +13,8 @@ use std::sync::{Arc, RwLock};
 
 /// Unwraps (decrypts) key encryption keys and data encryption keys using a KMS
 ///
-/// Caches key encryption keys, so one instance should be shared.
-/// Key encryption key ids must be globally unique, so this can be shared
-/// across multiple files.
+/// A [`KeyUnwrapper`] instance is specific to a single Parquet file and should not
+/// be shared between files.
 pub struct KeyUnwrapper {
     kms_manager: Arc<KmsManager>,
     kms_connection_config: RwLock<Arc<KmsConnectionConfig>>,
