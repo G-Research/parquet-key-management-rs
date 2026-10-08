@@ -1,4 +1,4 @@
-use parquet::errors::{ParquetError, Result};
+use crate::errors::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 /// Serializable key material that describes a wrapped encryption key
@@ -130,7 +130,7 @@ impl KeyMaterialBuilder {
                 wrapped_kek: self.wrapped_kek,
             })
         } else {
-            Err(ParquetError::General(
+            Err(Error::General(
                 "Wrapped key not set when building key material".to_owned(),
             ))
         }
@@ -140,13 +140,13 @@ impl KeyMaterialBuilder {
 impl KeyMaterial {
     pub fn deserialize(key_material: &str) -> Result<Self> {
         let material: KeyMaterial = serde_json::from_str(key_material).map_err(|e| {
-            ParquetError::General(format!(
+            Error::General(format!(
                 "Error deserializing JSON encryption key material: {e}. \
                 Perhaps this file was encrypted without using a KMS?"
             ))
         })?;
         if material.key_material_type != "PKMT1" {
-            return Err(ParquetError::General(format!(
+            return Err(Error::General(format!(
                 "Unsupported key material type: {}",
                 material.key_material_type
             )));
@@ -155,9 +155,8 @@ impl KeyMaterial {
     }
 
     pub fn serialize(&self) -> Result<String> {
-        serde_json::to_string(self).map_err(|e| {
-            ParquetError::General(format!("Error serializing key material to JSON: {e}"))
-        })
+        serde_json::to_string(self)
+            .map_err(|e| Error::General(format!("Error serializing key material to JSON: {e}")))
     }
 }
 

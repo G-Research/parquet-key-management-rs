@@ -1,8 +1,8 @@
 //! Encryption and decryption of data encryption keys (DEKs) with key encryption keys (KEKs)
 
+use crate::errors::{Error, Result};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
-use parquet::errors::{ParquetError, Result};
 use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
 use ring::rand::{SecureRandom, SystemRandom};
 
@@ -14,7 +14,7 @@ pub(crate) fn encrypt_encryption_key(
 ) -> Result<String> {
     let algorithm = &AES_128_GCM;
     let kek = UnboundKey::new(algorithm, kek_bytes).map_err(|e| {
-        ParquetError::General(format!(
+        Error::General(format!(
             "Error creating AES key from key encryption key bytes: {e}"
         ))
     })?;
@@ -41,20 +41,20 @@ pub(crate) fn decrypt_encryption_key(
     kek_id: &[u8],
     kek_bytes: &[u8],
 ) -> Result<Vec<u8>> {
-    let encrypted_key = BASE64_STANDARD.decode(wrapped_key).map_err(|e| {
-        ParquetError::General(format!("Could not base64 decode data encryption key: {e}"))
-    })?;
+    let encrypted_key = BASE64_STANDARD
+        .decode(wrapped_key)
+        .map_err(|e| Error::General(format!("Could not base64 decode data encryption key: {e}")))?;
 
     let algorithm = &AES_128_GCM;
     let kek = UnboundKey::new(algorithm, kek_bytes).map_err(|e| {
-        ParquetError::General(format!(
+        Error::General(format!(
             "Error creating AES key from key encryption key bytes: {e}"
         ))
     })?;
     let kek = LessSafeKey::new(kek);
 
     if encrypted_key.len() < NONCE_LEN + algorithm.tag_len() {
-        return Err(ParquetError::General(
+        return Err(Error::General(
             "Encrypted data encryption key is too short".to_owned(),
         ));
     }

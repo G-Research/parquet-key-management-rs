@@ -4,9 +4,9 @@
 pub(crate) mod bridge;
 pub mod reenter_async;
 
+use crate::errors::Result;
 use crate::kms::KmsConnectionConfig;
 use futures::future::BoxFuture;
-use parquet::errors::Result;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -14,7 +14,8 @@ use std::sync::Arc;
 /// This should be implemented by user code for integration with your KMS.
 ///
 /// # Example of writing then reading an encrypted Parquet file asynchronously
-/// ```
+#[cfg_attr(feature = "parquet", doc = "```")]
+#[cfg_attr(not(feature = "parquet"), doc = "```ignore")]
 /// use arrow_array::{ArrayRef, Float32Array, Int32Array, RecordBatch};
 /// use base64::prelude::BASE64_STANDARD;
 /// use base64::Engine;
@@ -23,7 +24,7 @@ use std::sync::Arc;
 /// use parquet::arrow::arrow_reader::ArrowReaderOptions;
 /// use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 /// use parquet::arrow::async_writer::AsyncArrowWriter;
-/// use parquet::errors::{ParquetError, Result};
+/// use parquet_key_management::errors::{Error, Result};
 /// use parquet::file::properties::WriterProperties;
 /// use parquet_key_management::crypto_factory::{
 ///     CryptoFactory, DecryptionConfiguration, EncryptionConfigurationBuilder,
@@ -39,7 +40,7 @@ use std::sync::Arc;
 /// # #[cfg(not(feature = "tokio"))] fn main() {}
 /// # #[cfg(feature = "tokio")]
 /// # #[tokio::main(flavor = "multi_thread")]
-/// # async fn main() -> Result<()> {
+/// # async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 ///     let temp_dir = TempDir::new()?;
 ///     let file_path = temp_dir.path().join("encrypted_example.parquet");
 ///
@@ -133,10 +134,10 @@ use std::sync::Arc;
 ///         // Get the AES key corresponding to a key identifier
 ///         fn get_key(&self, master_key_identifier: &str) -> Result<LessSafeKey> {
 ///             let key = self.key_map.get(master_key_identifier).ok_or_else(|| {
-///                 ParquetError::General(format!("Invalid master key '{master_key_identifier}'"))
+///                 Error::General(format!("Invalid master key '{master_key_identifier}'"))
 ///             })?;
 ///             let key = UnboundKey::new(&AES_128_GCM, key)
-///                 .map_err(|e| ParquetError::General(format!("Error creating AES key '{e}'")))?;
+///                 .map_err(|e| Error::General(format!("Error creating AES key '{e}'")))?;
 ///             Ok(LessSafeKey::new(key))
 ///         }
 ///     }
@@ -175,12 +176,12 @@ use std::sync::Arc;
 ///             master_key_identifier: &str,
 ///         ) -> Result<Vec<u8>> {
 ///             let wrapped_key = BASE64_STANDARD.decode(wrapped_key).map_err(|e| {
-///                 ParquetError::General(format!("Error base64 decoding wrapped key: {e}"))
+///                 Error::General(format!("Error base64 decoding wrapped key: {e}"))
 ///             })?;
 ///             let master_key = self.get_key(master_key_identifier)?;
 ///             let aad = master_key_identifier.as_bytes();
 ///             if wrapped_key.len() < NONCE_LEN + master_key.algorithm().tag_len() {
-///                 return Err(ParquetError::General("Wrapped key is too short".to_owned()));
+///                 return Err(Error::General("Wrapped key is too short".to_owned()));
 ///             }
 ///             let nonce = ring::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
 ///

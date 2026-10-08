@@ -1,9 +1,9 @@
 mod wrap;
 
+use crate::errors::Result;
 use crate::kms::{AsyncKmsClientFactory, AsyncKmsClientRef, KmsClientFactory, KmsConnectionConfig};
 use crate::test_kms::async_impl::wrap::WrappingAsyncKmsClient;
 use crate::test_kms::{KmsConnectionConfigDetails, TestKmsClientFactory};
-use parquet::errors::Result;
 use std::sync::Arc;
 
 /// Factory for building asynchronous KMS client instances wrapping synchronous
