@@ -632,13 +632,13 @@ mod tests {
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
         // The KMS config is updated from the footer key metadata per file,
-        // so separate decryption properties are needed for each file
-        let decryption_props = || {
+        // so a separate key unwrapper is needed for each file
+        let key_unwrapper = || {
             let config = DecryptionConfiguration::builder()
                 .set_read_kms_url(true)
                 .build();
             crypto_factory
-                .file_decryption_properties(Arc::new(KmsConnectionConfig::default()), config)
+                .key_unwrapper(Arc::new(KmsConnectionConfig::default()), config)
                 .unwrap()
         };
 
@@ -670,18 +670,18 @@ mod tests {
             expected_config("https://example.com/kms2/"),
         ];
 
-        decryption_props()
-            .footer_key(Some(key_material_1.as_bytes()))
+        key_unwrapper()
+            .unwrap_key(key_material_1.as_bytes())
             .unwrap();
-        decryption_props()
-            .footer_key(Some(key_material_2.as_bytes()))
+        key_unwrapper()
+            .unwrap_key(key_material_2.as_bytes())
             .unwrap();
         // A new client should have been created for the second URL
         assert_eq!(expected_invocations, kms_factory.invocations());
         assert_eq!(2, crypto_factory.cache_stats().num_kms_clients);
 
-        decryption_props()
-            .footer_key(Some(key_material_1.as_bytes()))
+        key_unwrapper()
+            .unwrap_key(key_material_1.as_bytes())
             .unwrap();
         // The cached client for the first URL should be reused
         assert_eq!(expected_invocations, kms_factory.invocations());
@@ -698,17 +698,17 @@ mod tests {
             .set_double_wrapping(false)
             .build()
             .unwrap();
-        let encryption_props = crypto_factory
-            .file_encryption_properties(kms_config.clone(), &encryption_config)
+        let encryption_keys = crypto_factory
+            .file_encryption_keys(kms_config.clone(), &encryption_config)
             .unwrap();
 
-        let decryption_props = crypto_factory
-            .file_decryption_properties(kms_config, Default::default())
+        let key_unwrapper = crypto_factory
+            .key_unwrapper(kms_config, Default::default())
             .unwrap();
-        let footer_key = decryption_props
-            .footer_key(encryption_props.footer_key_metadata().map(|k| k.as_bytes()))
+        let footer_key = key_unwrapper
+            .unwrap_key(encryption_keys.footer_key().metadata())
             .unwrap();
-        assert_eq!(encryption_props.footer_key(), footer_key.as_slice());
+        assert_eq!(encryption_keys.footer_key().key(), footer_key.as_slice());
 
         // The factory should only see "DEFAULT" values, and the client
         // created when writing should be reused when reading.
@@ -1041,18 +1041,18 @@ mod tests {
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
 
-        let generate_encryption_props = |kms_config: &Arc<KmsConnectionConfig>| {
+        let generate_encryption_keys = |kms_config: &Arc<KmsConnectionConfig>| {
             let _ = crypto_factory
-                .file_encryption_properties(kms_config.clone(), &encryption_config)
+                .file_encryption_keys(kms_config.clone(), &encryption_config)
                 .unwrap();
         };
 
-        generate_encryption_props(&kms_config_1);
+        generate_encryption_keys(&kms_config_1);
         assert_eq!(1, kms_factory.keys_wrapped());
         assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
 
         // A new KEK must be generated and wrapped by the second KMS instance
-        generate_encryption_props(&kms_config_2);
+        generate_encryption_keys(&kms_config_2);
         assert_eq!(2, kms_factory.keys_wrapped());
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
         let expected_config = |url: &str| KmsConnectionConfigDetails {
@@ -1070,8 +1070,8 @@ mod tests {
         );
 
         // Cached KEKs are reused for each instance
-        generate_encryption_props(&kms_config_1);
-        generate_encryption_props(&kms_config_2);
+        generate_encryption_keys(&kms_config_1);
+        generate_encryption_keys(&kms_config_2);
         assert_eq!(2, kms_factory.keys_wrapped());
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
     }
