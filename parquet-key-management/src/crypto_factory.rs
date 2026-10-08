@@ -301,7 +301,8 @@ impl Default for DecryptionConfigurationBuilder {
 /// but the same encryption properties should not be reused between different files.
 ///
 /// The `KmsClientFactory` will be used to create KMS clients as required,
-/// and these will be internally cached based on the KMS instance ID and the key access token.
+/// and these will be internally cached based on the KMS instance ID, KMS instance URL
+/// and the key access token.
 /// This means that if the key access token is changed using
 /// [`KmsConnectionConfig::refresh_key_access_token`],
 /// new `KmsClient` instances will be created using the new token rather than reusing
@@ -617,6 +618,101 @@ mod tests {
     }
 
     #[test]
+    fn test_kms_client_caching_with_different_urls() {
+        let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+        let crypto_factory = CryptoFactory::new(kms_factory.clone());
+        // The KMS config is updated from the footer key metadata per file,
+        // so separate decryption properties are needed for each file
+        let decryption_props = || {
+            let config = DecryptionConfiguration::builder()
+                .set_read_kms_url(true)
+                .build();
+            crypto_factory
+                .file_decryption_properties(Arc::new(KmsConnectionConfig::default()), config)
+                .unwrap()
+        };
+
+        let dek = "1234567890123450".as_bytes().to_vec();
+        let kms = TestKmsClientFactory::with_default_keys()
+            .create_client(&Default::default())
+            .unwrap();
+        let wrapped_key = kms.wrap_key(&dek, "kc1").unwrap();
+
+        let footer_key_material = |url: &str| {
+            KeyMaterialBuilder::for_footer_key("123".to_owned(), url.to_owned())
+                .with_single_wrapped_key("kc1".to_owned(), wrapped_key.clone())
+                .build()
+                .unwrap()
+                .serialize()
+                .unwrap()
+        };
+        let key_material_1 = footer_key_material("https://example.com/kms1/");
+        let key_material_2 = footer_key_material("https://example.com/kms2/");
+
+        let expected_config = |url: &str| KmsConnectionConfigDetails {
+            kms_instance_id: "123".to_string(),
+            kms_instance_url: url.to_string(),
+            key_access_token: "DEFAULT".to_string(),
+            custom_kms_conf: Default::default(),
+        };
+        let expected_invocations = vec![
+            expected_config("https://example.com/kms1/"),
+            expected_config("https://example.com/kms2/"),
+        ];
+
+        decryption_props()
+            .footer_key(Some(key_material_1.as_bytes()))
+            .unwrap();
+        decryption_props()
+            .footer_key(Some(key_material_2.as_bytes()))
+            .unwrap();
+        // A new client should have been created for the second URL
+        assert_eq!(expected_invocations, kms_factory.invocations());
+        assert_eq!(2, crypto_factory.cache_stats().num_kms_clients);
+
+        decryption_props()
+            .footer_key(Some(key_material_1.as_bytes()))
+            .unwrap();
+        // The cached client for the first URL should be reused
+        assert_eq!(expected_invocations, kms_factory.invocations());
+    }
+
+    #[test]
+    fn test_kms_client_caching_with_default_instance() {
+        let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+        let crypto_factory = CryptoFactory::new(kms_factory.clone());
+        // Instance ID and URL are not set, so default values are used
+        let kms_config = Arc::new(KmsConnectionConfig::default());
+
+        let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
+            .set_double_wrapping(false)
+            .build()
+            .unwrap();
+        let encryption_props = crypto_factory
+            .file_encryption_properties(kms_config.clone(), &encryption_config)
+            .unwrap();
+
+        let decryption_props = crypto_factory
+            .file_decryption_properties(kms_config, Default::default())
+            .unwrap();
+        let footer_key = decryption_props
+            .footer_key(encryption_props.footer_key_metadata().map(|k| k.as_bytes()))
+            .unwrap();
+        assert_eq!(encryption_props.footer_key(), footer_key.as_slice());
+
+        // The factory should only see "DEFAULT" values, and the client
+        // created when writing should be reused when reading.
+        let expected_invocations = vec![KmsConnectionConfigDetails {
+            kms_instance_id: "DEFAULT".to_string(),
+            kms_instance_url: "DEFAULT".to_string(),
+            key_access_token: "DEFAULT".to_string(),
+            custom_kms_conf: Default::default(),
+        }];
+        assert_eq!(expected_invocations, kms_factory.invocations());
+        assert_eq!(1, crypto_factory.cache_stats().num_kms_clients);
+    }
+
+    #[test]
     fn test_kms_client_expiration() {
         let time_controller = crate::kms_manager::mock_time::time_controller();
 
@@ -927,6 +1023,62 @@ mod tests {
         generate_encryption_props();
         // The KEK cache for the refreshed token is still valid, no new KEKs were generated
         assert_eq!(9, kms_factory.keys_wrapped());
+        assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
+    }
+
+    /// KEKs wrapped by one KMS instance must not be reused when encrypting with another instance
+    #[test]
+    fn test_encryption_key_encryption_key_caching_with_different_urls() {
+        let kms_config = |url: &str| {
+            Arc::new(
+                KmsConnectionConfig::builder()
+                    .set_kms_instance_id("123".to_owned())
+                    .set_kms_instance_url(url.to_owned())
+                    .build(),
+            )
+        };
+        let kms_config_1 = kms_config("https://example.com/kms1/");
+        let kms_config_2 = kms_config("https://example.com/kms2/");
+        let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
+            .set_double_wrapping(true)
+            .build()
+            .unwrap();
+
+        let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
+        let crypto_factory = CryptoFactory::new(kms_factory.clone());
+
+        let generate_encryption_props = |kms_config: &Arc<KmsConnectionConfig>| {
+            let _ = crypto_factory
+                .file_encryption_properties(kms_config.clone(), &encryption_config)
+                .unwrap();
+        };
+
+        generate_encryption_props(&kms_config_1);
+        assert_eq!(1, kms_factory.keys_wrapped());
+        assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
+
+        // A new KEK must be generated and wrapped by the second KMS instance
+        generate_encryption_props(&kms_config_2);
+        assert_eq!(2, kms_factory.keys_wrapped());
+        assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
+        let expected_config = |url: &str| KmsConnectionConfigDetails {
+            kms_instance_id: "123".to_string(),
+            kms_instance_url: url.to_string(),
+            key_access_token: "DEFAULT".to_string(),
+            custom_kms_conf: Default::default(),
+        };
+        assert_eq!(
+            vec![
+                expected_config("https://example.com/kms1/"),
+                expected_config("https://example.com/kms2/"),
+            ],
+            kms_factory.invocations()
+        );
+
+        // Cached KEKs are reused for each instance
+        generate_encryption_props(&kms_config_1);
+        generate_encryption_props(&kms_config_2);
+        assert_eq!(2, kms_factory.keys_wrapped());
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
     }
 
