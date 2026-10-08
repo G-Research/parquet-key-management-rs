@@ -214,7 +214,10 @@ pub type AsyncKmsClientRef = Arc<dyn AsyncKmsClient>;
 /// Trait for factories that create asynchronous KMS clients
 #[async_trait::async_trait]
 pub trait AsyncKmsClientFactory: Send + Sync {
-    /// Create a new [`AsyncKmsClient`] instance using the provided configuration
+    /// Create a new [`AsyncKmsClient`] instance using the provided configuration.
+    ///
+    /// See [`KmsClientFactory::create_client`](crate::kms::KmsClientFactory::create_client)
+    /// for details of how the configuration is populated and how clients are cached.
     async fn create_client(
         &self,
         kms_connection_config: &KmsConnectionConfig,
