@@ -1,6 +1,7 @@
 //! The key-management tools API for building file encryption and decryption properties
 //! that work with a Key Management Server.
 
+use crate::crypto::rand::{SecureRandom, SystemRandom};
 use crate::encryption_keys::{EncryptionKey, FileEncryptionKeys};
 use crate::errors::{Error, Result};
 use crate::key_unwrapper::KeyUnwrapper;
@@ -13,7 +14,6 @@ use crate::kms_manager::KmsManager;
 use parquet::encryption::decrypt::FileDecryptionProperties;
 #[cfg(feature = "parquet")]
 use parquet::encryption::encrypt::FileEncryptionProperties;
-use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

@@ -16,12 +16,12 @@ all-features = true
 [dependencies]
 async-trait = { version = "0.1.89" }
 base64 = { version = "0.22", default-features = false, features = ["std"] }
-ring = { version = "0.17", default-features = false, features = ["std"] }
 serde = { version = "1.0.221", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.60", default-features = false, features = ["std"] }
 
 # optional
 async-std = { version = "1", optional = true }
+aws-lc-rs = { version = "1.12", default-features = false, features = ["aws-lc-sys"], optional = true }
 datafusion-execution = { version = ">=52.1.0, <55", default-features = false, features = [
   "parquet_encryption",
 ], optional = true }
@@ -32,6 +32,7 @@ datafusion-common = { version = ">=52.1.0, <55", default-features = false, featu
 futures = { workspace = true, optional = true }
 object_store = { version = ">=0.12.5, <0.14", default-features = false, optional = true }
 parquet = { workspace = true, optional = true }
+ring = { version = "0.17", default-features = false, features = ["std"], optional = true }
 smol = { version = "2", default-features = false, optional = true }
 tokio = { workspace = true, optional = true }
 
@@ -45,6 +46,7 @@ futures = { workspace = true }
 object_store = { version = ">=0.12.5, <0.14", default-features = false }
 parquet = { workspace = true, features = ["arrow"] }
 paste = { version = "1.0.15" }
+ring = { version = "0.17", default-features = false, features = ["std"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 url = { version = "2.5.7" }
@@ -54,8 +56,10 @@ deltalake-core = { git = "https://github.com/G-Research-Forks/delta-rs", tag = "
 ] }
 
 [features]
-default = ["parquet"]
+default = ["parquet", "ring"]
 parquet = ["dep:parquet"]
+ring = ["dep:ring"]
+aws-lc-rs = ["dep:aws-lc-rs"]
 async = ["dep:futures"]
 async-std = ["async", "dep:async-std"]
 smol = ["async", "dep:smol"]

@@ -37,8 +37,16 @@ impl StdError for Error {
     }
 }
 
+#[cfg(feature = "ring")]
 impl From<ring::error::Unspecified> for Error {
     fn from(e: ring::error::Unspecified) -> Self {
+        Error::External(Box::new(e))
+    }
+}
+
+#[cfg(feature = "aws-lc-rs")]
+impl From<aws_lc_rs::error::Unspecified> for Error {
+    fn from(e: aws_lc_rs::error::Unspecified) -> Self {
         Error::External(Box::new(e))
     }
 }

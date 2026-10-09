@@ -27,8 +27,19 @@ for examples of how to use this library and the full API reference.
 The `parquet_key_management` crate provides the following features which may be enabled in your `Cargo.toml`:
 
 - `parquet` - integration with the `parquet` crate (enabled by default)
+- `ring` - use [ring](https://crates.io/crates/ring) for cryptographic operations (enabled by default)
+- `aws-lc-rs` - use [aws-lc-rs](https://crates.io/crates/aws-lc-rs) for cryptographic operations
 - `async` - enables the asynchronous KMS client API
 - `async-std` - enables support for the [async-std](https://crates.io/crates/async-std) runtime in the asynchronous KMS client API
 - `smol` - enables support for the [smol](https://crates.io/crates/smol) runtime in the asynchronous KMS client API
 - `tokio` - enables support for the [Tokio](https://crates.io/crates/tokio) runtime in the asynchronous KMS client API
 - `datafusion` - enables the `datafusion` module, which implements integration with [Apache DataFusion](https://datafusion.apache.org/)
+
+One of the `ring` or `aws-lc-rs` features must be enabled.
+To use aws-lc-rs, disable default features and enable the `aws-lc-rs` feature, for example:
+
+```toml
+parquet-key-management = { version = "0.7", default-features = false, features = ["parquet", "aws-lc-rs"] }
+```
+
+If both features are enabled, aws-lc-rs is used.

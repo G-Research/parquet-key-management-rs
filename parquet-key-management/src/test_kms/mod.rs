@@ -5,12 +5,12 @@
 #[cfg(feature = "async")]
 mod async_impl;
 
+use crate::crypto::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
+use crate::crypto::rand::{SecureRandom, SystemRandom};
 use crate::errors::{Error, Result};
 use crate::kms::{KmsClient, KmsClientFactory, KmsClientRef, KmsConnectionConfig};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
-use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -132,7 +132,7 @@ impl KmsClient for TestKmsClient {
 
         let mut nonce = [0u8; NONCE_LEN];
         rng.fill(&mut nonce)?;
-        let nonce = ring::aead::Nonce::assume_unique_for_key(nonce);
+        let nonce = crate::crypto::aead::Nonce::assume_unique_for_key(nonce);
 
         let tag_len = key.algorithm().tag_len();
         let mut ciphertext = Vec::with_capacity(NONCE_LEN + key_bytes.len() + tag_len);
@@ -161,7 +161,8 @@ impl KmsClient for TestKmsClient {
             return Err(Error::General("Wrapped key is too short".to_owned()));
         }
 
-        let nonce = ring::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
+        let nonce =
+            crate::crypto::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
 
         let mut plaintext = Vec::with_capacity(wrapped_key.len() - NONCE_LEN);
         plaintext.extend_from_slice(&wrapped_key[NONCE_LEN..]);
