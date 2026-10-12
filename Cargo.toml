@@ -15,7 +15,7 @@ rust-version = "1.88.0"
 arrow = { version = ">=57.2, <59", default-features = false }
 arrow-array = { version = ">=57.2, <59", default-features = false }
 arrow-schema = { version = ">=57.2, <59", default-features = false }
-futures = { version = "0.3", default-features = false }
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
 parquet = { version = ">=57.2, <59", default-features = false, features = ["encryption"] }
 tempfile = { version = "3.24", default-features = false }
 tokio = { version = "1.52", default-features = false, features = ["rt-multi-thread"] }

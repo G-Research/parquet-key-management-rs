@@ -1,17 +1,21 @@
 use crate::crypto_factory::DecryptionConfiguration;
+use crate::errors::{Error, Result};
 use crate::key_encryption;
 use crate::key_material::KeyMaterial;
 use crate::kms::KmsConnectionConfig;
 use crate::kms_manager::{KekReadCache, KmsManager};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+#[cfg(feature = "parquet")]
 use parquet::encryption::decrypt::KeyRetriever;
-use parquet::errors::{ParquetError, Result};
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, RwLock};
 
 /// Unwraps (decrypts) key encryption keys and data encryption keys using a KMS
-pub(crate) struct KeyUnwrapper {
+///
+/// A [`KeyUnwrapper`] instance is specific to a single Parquet file and should not
+/// be shared between files.
+pub struct KeyUnwrapper {
     kms_manager: Arc<KmsManager>,
     kms_connection_config: RwLock<Arc<KmsConnectionConfig>>,
     decryption_configuration: DecryptionConfiguration,
@@ -19,7 +23,7 @@ pub(crate) struct KeyUnwrapper {
 }
 
 impl KeyUnwrapper {
-    pub fn new(
+    pub(crate) fn new(
         kms_manager: Arc<KmsManager>,
         kms_connection_config: Arc<KmsConnectionConfig>,
         decryption_configuration: DecryptionConfiguration,
@@ -67,7 +71,7 @@ impl KeyUnwrapper {
             }
         };
         let decoded_kek_id = BASE64_STANDARD.decode(kek_id).map_err(|e| {
-            ParquetError::General(format!(
+            Error::General(format!(
                 "Could not base64 decode key encryption key id: {e}"
             ))
         })?;
@@ -96,7 +100,7 @@ impl KeyUnwrapper {
         let mut_config = Arc::make_mut(&mut kms_connection_config);
         if mut_config.kms_instance_id().is_empty() {
             if kms_instance_id.is_empty() {
-                return Err(ParquetError::General(
+                return Err(Error::General(
                     "KMS instance ID not set in connection configuration or footer key metadata"
                         .to_owned(),
                 ));
@@ -107,7 +111,7 @@ impl KeyUnwrapper {
         if mut_config.kms_instance_url().is_empty() {
             if self.decryption_configuration.read_kms_url() {
                 if kms_instance_url.is_empty() {
-                    return Err(ParquetError::General(
+                    return Err(Error::General(
                         "KMS instance URL not set in connection configuration or footer key metadata"
                             .to_owned(),
                     ));
@@ -120,14 +124,21 @@ impl KeyUnwrapper {
 
         Ok(())
     }
-}
 
-impl KeyRetriever for KeyUnwrapper {
-    fn retrieve_key(&self, key_metadata: &[u8]) -> Result<Vec<u8>> {
-        let key_material = std::str::from_utf8(key_metadata)?;
+    /// Unwrap an encrypted key using a KMS
+    ///
+    /// Takes the key metadata bytes from a Parquet file and returns
+    /// a decrypted data encryption key.
+    ///
+    /// This should be called on the footer key before unwrapping
+    /// column keys, as the footer key metadata may contain the details
+    /// of the KMS URL and KMS ID to use.
+    pub fn unwrap_key(&self, key_metadata: &[u8]) -> Result<Vec<u8>> {
+        let key_material = std::str::from_utf8(key_metadata)
+            .map_err(|e| Error::General(format!("Key metadata is not valid UTF-8: {e}")))?;
         let key_material = KeyMaterial::deserialize(key_material)?;
         if !key_material.internal_storage {
-            return Err(ParquetError::NYI(
+            return Err(Error::NotYetImplemented(
                 "Decryption using external key material is not yet implemented".to_owned(),
             ));
         }
@@ -151,12 +162,19 @@ impl KeyRetriever for KeyUnwrapper {
                     &wrapped_kek,
                 )
             } else {
-                Err(ParquetError::General(
+                Err(Error::General(
                     "Key uses double wrapping but key encryption key is not set".to_owned(),
                 ))
             }
         } else {
             self.unwrap_single_wrapped_key(&key_material.wrapped_dek, &key_material.master_key_id)
         }
+    }
+}
+
+#[cfg(feature = "parquet")]
+impl KeyRetriever for KeyUnwrapper {
+    fn retrieve_key(&self, key_metadata: &[u8]) -> parquet::errors::Result<Vec<u8>> {
+        Ok(self.unwrap_key(key_metadata)?)
     }
 }

@@ -1,5 +1,5 @@
+use crate::errors::Result;
 use crate::kms::{KmsClientFactory, KmsClientRef, KmsConnectionConfig};
-use parquet::errors::Result;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::Hash;

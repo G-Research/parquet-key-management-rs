@@ -1,15 +1,18 @@
 //! The key-management tools API for building file encryption and decryption properties
 //! that work with a Key Management Server.
 
+use crate::encryption_keys::{EncryptionKey, FileEncryptionKeys};
+use crate::errors::{Error, Result};
 use crate::key_unwrapper::KeyUnwrapper;
 use crate::key_wrapper::KeyWrapper;
 #[cfg(feature = "async")]
 use crate::kms::{reenter_async, AsyncKmsClientFactory, BridgeKmsClientFactory};
 use crate::kms::{KmsClientFactory, KmsConnectionConfig};
 use crate::kms_manager::KmsManager;
+#[cfg(feature = "parquet")]
 use parquet::encryption::decrypt::FileDecryptionProperties;
+#[cfg(feature = "parquet")]
 use parquet::encryption::encrypt::FileEncryptionProperties;
-use parquet::errors::{ParquetError, Result};
 use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -112,14 +115,14 @@ impl EncryptionConfigurationBuilder {
                 let prev_id = seen_columns.insert(col_name.clone(), master_key_id.clone());
                 match prev_id {
                     Some(prev_id) if &prev_id == master_key_id => {
-                        return Err(ParquetError::General(format!(
+                        return Err(Error::General(format!(
                             "Invalid encryption configuration. \
                             Column '{col_name}' is repeated multiple times for master key id \
                             '{master_key_id}'"
                         )));
                     }
                     Some(prev_id) => {
-                        return Err(ParquetError::General(format!(
+                        return Err(Error::General(format!(
                             "Invalid encryption configuration. \
                             Column '{col_name}' is configured to use multiple master key ids: \
                             '{master_key_id}' and '{prev_id}'"
@@ -272,7 +275,8 @@ impl Default for DecryptionConfigurationBuilder {
 ///
 /// The `CryptoFactory` can then be used to generate file encryption properties
 /// when writing an encrypted Parquet file:
-/// ```no_run
+#[cfg_attr(feature = "parquet", doc = "```no_run")]
+#[cfg_attr(not(feature = "parquet"), doc = "```ignore")]
 /// # use std::sync::Arc;
 /// # use parquet_key_management::crypto_factory::{CryptoFactory, EncryptionConfiguration};
 /// # use parquet_key_management::kms::KmsConnectionConfig;
@@ -281,11 +285,12 @@ impl Default for DecryptionConfigurationBuilder {
 /// let encryption_config = EncryptionConfiguration::builder("master_key_id".into()).build()?;
 /// let encryption_properties = crypto_factory.file_encryption_properties(
 ///     kms_connection_config, &encryption_config)?;
-/// # Ok::<(), parquet::errors::ParquetError>(())
+/// # Ok::<(), parquet_key_management::errors::Error>(())
 /// ```
 ///
 /// And file decryption properties can be constructed for reading an encrypted file:
-/// ```no_run
+#[cfg_attr(feature = "parquet", doc = "```no_run")]
+#[cfg_attr(not(feature = "parquet"), doc = "```ignore")]
 /// # use std::sync::Arc;
 /// # use parquet_key_management::crypto_factory::{CryptoFactory, DecryptionConfiguration};
 /// # use parquet_key_management::kms::KmsConnectionConfig;
@@ -294,7 +299,7 @@ impl Default for DecryptionConfigurationBuilder {
 /// let decryption_config = DecryptionConfiguration::default();
 /// let decryption_properties = crypto_factory.file_decryption_properties(
 ///     kms_connection_config, decryption_config)?;
-/// # Ok::<(), parquet::errors::ParquetError>(())
+/// # Ok::<(), parquet_key_management::errors::Error>(())
 /// ```
 ///
 /// A `CryptoFactory` can be reused multiple times to encrypt or decrypt many files,
@@ -388,33 +393,60 @@ impl CryptoFactory {
         Self::new_async(reenter_async::TokioReenterAsync, kms_client_factory)
     }
 
+    /// Get a KeyUnwrapper to use for reading a Parquet file
+    pub fn key_unwrapper(
+        &self,
+        kms_connection_config: Arc<KmsConnectionConfig>,
+        decryption_configuration: DecryptionConfiguration,
+    ) -> Result<KeyUnwrapper> {
+        Ok(KeyUnwrapper::new(
+            self.kms_manager.clone(),
+            kms_connection_config,
+            decryption_configuration,
+        ))
+    }
+
     /// Create file decryption properties for a Parquet file
+    #[cfg(feature = "parquet")]
     pub fn file_decryption_properties(
         &self,
         kms_connection_config: Arc<KmsConnectionConfig>,
         decryption_configuration: DecryptionConfiguration,
     ) -> Result<Arc<FileDecryptionProperties>> {
-        let key_retriever = Arc::new(KeyUnwrapper::new(
-            self.kms_manager.clone(),
-            kms_connection_config,
-            decryption_configuration,
-        ));
-        FileDecryptionProperties::with_key_retriever(key_retriever).build()
+        let key_retriever =
+            Arc::new(self.key_unwrapper(kms_connection_config, decryption_configuration)?);
+        Ok(FileDecryptionProperties::with_key_retriever(key_retriever).build()?)
     }
 
     /// Create file encryption properties for a Parquet file
+    ///
+    /// To set further encryption options not managed by the [`CryptoFactory`],
+    /// use [`file_encryption_keys`](Self::file_encryption_keys) and
+    /// [`FileEncryptionKeys::into_parquet_builder`] instead.
+    #[cfg(feature = "parquet")]
     pub fn file_encryption_properties(
         &self,
         kms_connection_config: Arc<KmsConnectionConfig>,
         encryption_configuration: &EncryptionConfiguration,
     ) -> Result<Arc<FileEncryptionProperties>> {
+        let encryption_keys =
+            self.file_encryption_keys(kms_connection_config, encryption_configuration)?;
+        Ok(encryption_keys.into_parquet_builder().build()?)
+    }
+
+    /// Generate the encryption keys and key metadata required to encrypt a Parquet file.
+    pub fn file_encryption_keys(
+        &self,
+        kms_connection_config: Arc<KmsConnectionConfig>,
+        encryption_configuration: &EncryptionConfiguration,
+    ) -> Result<FileEncryptionKeys> {
         if !encryption_configuration.internal_key_material {
-            return Err(ParquetError::NYI(
+            return Err(Error::NotYetImplemented(
                 "External key material is not yet implemented".to_owned(),
             ));
         }
         if encryption_configuration.data_key_length_bits != 128 {
-            return Err(ParquetError::NYI(
+            return Err(Error::NotYetImplemented(
                 "Only 128 bit data keys are currently implemented".to_owned(),
             ));
         }
@@ -431,22 +463,19 @@ impl CryptoFactory {
             &mut key_wrapper,
         )?;
 
-        let mut builder = FileEncryptionProperties::builder(footer_key.key)
-            .with_footer_key_metadata(footer_key.metadata)
-            .with_plaintext_footer(encryption_configuration.plaintext_footer);
-
+        let mut column_keys = Vec::new();
         for (master_key_id, column_paths) in &encryption_configuration.column_key_ids {
             for column_path in column_paths {
                 let column_key = self.generate_key(master_key_id, false, &mut key_wrapper)?;
-                builder = builder.with_column_key_and_metadata(
-                    column_path,
-                    column_key.key,
-                    column_key.metadata,
-                );
+                column_keys.push((column_path.clone(), column_key));
             }
         }
 
-        builder.build()
+        Ok(FileEncryptionKeys::new(
+            footer_key,
+            encryption_configuration.plaintext_footer,
+            column_keys,
+        ))
     }
 
     fn generate_key(
@@ -471,33 +500,19 @@ impl CryptoFactory {
     }
 }
 
-struct EncryptionKey {
-    key: Vec<u8>,
-    metadata: Vec<u8>,
-}
-
-impl EncryptionKey {
-    pub fn new(key: Vec<u8>, metadata: Vec<u8>) -> Self {
-        Self { key, metadata }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::key_material::KeyMaterialBuilder;
     use crate::test_kms::{KmsConnectionConfigDetails, TestKmsClientFactory};
-    use parquet::data_type::AsBytes;
 
     #[test]
-    fn test_file_decryption_properties() {
+    fn test_key_unwrapper() {
         let kms_config = Arc::new(KmsConnectionConfig::default());
         let config = Default::default();
 
         let crypto_factory = CryptoFactory::new(TestKmsClientFactory::with_default_keys());
-        let decryption_props = crypto_factory
-            .file_decryption_properties(kms_config, config)
-            .unwrap();
+        let key_unwrapper = crypto_factory.key_unwrapper(kms_config, config).unwrap();
 
         let expected_dek = "1234567890123450".as_bytes().to_vec();
         let kms = TestKmsClientFactory::with_default_keys()
@@ -511,10 +526,9 @@ mod tests {
             .unwrap();
         let serialized_key_material = key_material.serialize().unwrap();
 
-        let dek = decryption_props
-            .footer_key(Some(serialized_key_material.as_bytes()))
-            .unwrap()
-            .into_owned();
+        let dek = key_unwrapper
+            .unwrap_key(serialized_key_material.as_bytes())
+            .unwrap();
 
         assert_eq!(dek, expected_dek);
     }
@@ -539,8 +553,8 @@ mod tests {
 
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
-        let decryption_props = crypto_factory
-            .file_decryption_properties(kms_config.clone(), config)
+        let key_unwrapper = crypto_factory
+            .key_unwrapper(kms_config.clone(), config)
             .unwrap();
 
         let dek = "1234567890123450".as_bytes().to_vec();
@@ -582,35 +596,31 @@ mod tests {
 
         assert_eq!(0, kms_factory.invocations().len());
 
-        decryption_props
-            .footer_key(Some(serialized_footer_key_material.as_bytes()))
-            .unwrap()
-            .into_owned();
+        key_unwrapper
+            .unwrap_key(serialized_footer_key_material.as_bytes())
+            .unwrap();
         assert_eq!(vec![default_config.clone()], kms_factory.invocations());
 
-        decryption_props
-            .column_key("x", Some(serialized_key_material.as_bytes()))
-            .unwrap()
-            .into_owned();
+        key_unwrapper
+            .unwrap_key(serialized_key_material.as_bytes())
+            .unwrap();
         // Same client should have been reused
         assert_eq!(vec![default_config.clone()], kms_factory.invocations());
 
         kms_config.refresh_key_access_token("super_secret".to_owned());
 
-        decryption_props
-            .column_key("x", Some(serialized_key_material.as_bytes()))
-            .unwrap()
-            .into_owned();
+        key_unwrapper
+            .unwrap_key(serialized_key_material.as_bytes())
+            .unwrap();
         // New key access token should have been used
         assert_eq!(
             vec![default_config.clone(), refreshed_config.clone()],
             kms_factory.invocations()
         );
 
-        decryption_props
-            .column_key("x", Some(serialized_key_material.as_bytes()))
-            .unwrap()
-            .into_owned();
+        key_unwrapper
+            .unwrap_key(serialized_key_material.as_bytes())
+            .unwrap();
         assert_eq!(
             vec![default_config, refreshed_config],
             kms_factory.invocations()
@@ -622,13 +632,13 @@ mod tests {
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
         // The KMS config is updated from the footer key metadata per file,
-        // so separate decryption properties are needed for each file
-        let decryption_props = || {
+        // so a separate key unwrapper is needed for each file
+        let key_unwrapper = || {
             let config = DecryptionConfiguration::builder()
                 .set_read_kms_url(true)
                 .build();
             crypto_factory
-                .file_decryption_properties(Arc::new(KmsConnectionConfig::default()), config)
+                .key_unwrapper(Arc::new(KmsConnectionConfig::default()), config)
                 .unwrap()
         };
 
@@ -660,18 +670,18 @@ mod tests {
             expected_config("https://example.com/kms2/"),
         ];
 
-        decryption_props()
-            .footer_key(Some(key_material_1.as_bytes()))
+        key_unwrapper()
+            .unwrap_key(key_material_1.as_bytes())
             .unwrap();
-        decryption_props()
-            .footer_key(Some(key_material_2.as_bytes()))
+        key_unwrapper()
+            .unwrap_key(key_material_2.as_bytes())
             .unwrap();
         // A new client should have been created for the second URL
         assert_eq!(expected_invocations, kms_factory.invocations());
         assert_eq!(2, crypto_factory.cache_stats().num_kms_clients);
 
-        decryption_props()
-            .footer_key(Some(key_material_1.as_bytes()))
+        key_unwrapper()
+            .unwrap_key(key_material_1.as_bytes())
             .unwrap();
         // The cached client for the first URL should be reused
         assert_eq!(expected_invocations, kms_factory.invocations());
@@ -688,17 +698,17 @@ mod tests {
             .set_double_wrapping(false)
             .build()
             .unwrap();
-        let encryption_props = crypto_factory
-            .file_encryption_properties(kms_config.clone(), &encryption_config)
+        let encryption_keys = crypto_factory
+            .file_encryption_keys(kms_config.clone(), &encryption_config)
             .unwrap();
 
-        let decryption_props = crypto_factory
-            .file_decryption_properties(kms_config, Default::default())
+        let key_unwrapper = crypto_factory
+            .key_unwrapper(kms_config, Default::default())
             .unwrap();
-        let footer_key = decryption_props
-            .footer_key(encryption_props.footer_key_metadata().map(|k| k.as_bytes()))
+        let footer_key = key_unwrapper
+            .unwrap_key(encryption_keys.footer_key().metadata())
             .unwrap();
-        assert_eq!(encryption_props.footer_key(), footer_key.as_slice());
+        assert_eq!(encryption_keys.footer_key().key(), footer_key.as_slice());
 
         // The factory should only see "DEFAULT" values, and the client
         // created when writing should be reused when reading.
@@ -723,8 +733,8 @@ mod tests {
 
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
-        let decryption_props = crypto_factory
-            .file_decryption_properties(kms_config.clone(), config)
+        let key_unwrapper = crypto_factory
+            .key_unwrapper(kms_config.clone(), config)
             .unwrap();
 
         let dek = "1234567890123450".as_bytes().to_vec();
@@ -742,10 +752,9 @@ mod tests {
         assert_eq!(0, kms_factory.invocations().len());
 
         let do_key_retrieval = || {
-            decryption_props
-                .footer_key(Some(serialized_key_material.as_bytes()))
-                .unwrap()
-                .into_owned();
+            key_unwrapper
+                .unwrap_key(serialized_key_material.as_bytes())
+                .unwrap();
         };
 
         do_key_retrieval();
@@ -779,7 +788,7 @@ mod tests {
     }
 
     #[test]
-    fn test_uniform_encryption_properties() {
+    fn test_uniform_encryption_keys() {
         let kms_config = Arc::new(KmsConnectionConfig::default());
         let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
             .set_double_wrapping(true)
@@ -788,26 +797,24 @@ mod tests {
 
         let crypto_factory = CryptoFactory::new(TestKmsClientFactory::with_default_keys());
 
-        let file_encryption_properties = crypto_factory
-            .file_encryption_properties(kms_config.clone(), &encryption_config)
+        let file_encryption_keys = crypto_factory
+            .file_encryption_keys(kms_config.clone(), &encryption_config)
             .unwrap();
 
-        let (column_names, column_keys, _) = file_encryption_properties.column_keys();
-        assert!(column_names.is_empty());
-        assert!(column_keys.is_empty());
+        assert_eq!(0, file_encryption_keys.column_keys().count());
     }
 
     #[test]
-    fn test_round_trip_double_wrapping_properties() {
-        round_trip_encryption_properties(true);
+    fn test_round_trip_double_wrapping_keys() {
+        round_trip_encryption_keys(true);
     }
 
     #[test]
-    fn test_round_trip_single_wrapping_properties() {
-        round_trip_encryption_properties(false);
+    fn test_round_trip_single_wrapping_keys() {
+        round_trip_encryption_keys(false);
     }
 
-    fn round_trip_encryption_properties(double_wrapping: bool) {
+    fn round_trip_encryption_keys(double_wrapping: bool) {
         let _time_controller = crate::kms_manager::mock_time::time_controller();
 
         let kms_config = Arc::new(
@@ -825,44 +832,31 @@ mod tests {
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
 
-        let file_encryption_properties = crypto_factory
-            .file_encryption_properties(kms_config.clone(), &encryption_config)
+        let file_encryption_keys = crypto_factory
+            .file_encryption_keys(kms_config.clone(), &encryption_config)
             .unwrap();
 
-        let decryption_properties = crypto_factory
-            .file_decryption_properties(kms_config.clone(), Default::default())
+        let key_unwrapper = crypto_factory
+            .key_unwrapper(kms_config.clone(), Default::default())
             .unwrap();
 
-        assert!(file_encryption_properties.encrypt_footer());
-        assert!(file_encryption_properties.aad_prefix().is_none());
-        assert_eq!(16, file_encryption_properties.footer_key().len());
+        assert!(!file_encryption_keys.plaintext_footer());
+        let footer_key = file_encryption_keys.footer_key();
+        assert_eq!(16, footer_key.key().len());
 
-        let retrieved_footer_key = decryption_properties
-            .footer_key(
-                file_encryption_properties
-                    .footer_key_metadata()
-                    .map(|k| k.as_bytes()),
-            )
-            .unwrap();
-        assert_eq!(
-            file_encryption_properties.footer_key(),
-            retrieved_footer_key.as_slice()
-        );
+        let retrieved_footer_key = key_unwrapper.unwrap_key(footer_key.metadata()).unwrap();
+        assert_eq!(footer_key.key(), retrieved_footer_key.as_slice());
 
-        let (column_names, column_keys, key_metadata) = file_encryption_properties.column_keys();
-        let mut all_columns: Vec<String> = column_names.clone();
+        let mut all_columns: Vec<&str> = file_encryption_keys
+            .column_keys()
+            .map(|(column_path, _)| column_path)
+            .collect();
         all_columns.sort();
         assert_eq!(vec!["x0", "x1", "x2", "x3"], all_columns);
-        for col_idx in 0..column_keys.len() {
-            let column_name = &column_names[col_idx];
-            let column_key = &column_keys[col_idx];
-            let key_metadata = &key_metadata[col_idx];
-
-            assert_eq!(16, column_key.len());
-            let retrieved_key = decryption_properties
-                .column_key(column_name, Some(key_metadata))
-                .unwrap();
-            assert_eq!(column_key, retrieved_key.as_slice());
+        for (_, column_key) in file_encryption_keys.column_keys() {
+            assert_eq!(16, column_key.key().len());
+            let retrieved_key = key_unwrapper.unwrap_key(column_key.metadata()).unwrap();
+            assert_eq!(column_key.key(), retrieved_key.as_slice());
         }
 
         assert_eq!(1, kms_factory.invocations().len());
@@ -893,77 +887,77 @@ mod tests {
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
 
-        let file_encryption_properties = crypto_factory
-            .file_encryption_properties(kms_config.clone(), &encryption_config)
+        let file_encryption_keys = crypto_factory
+            .file_encryption_keys(kms_config.clone(), &encryption_config)
             .unwrap();
 
-        let footer_key_metadata = file_encryption_properties.footer_key_metadata().cloned();
+        let footer_key_metadata = file_encryption_keys.footer_key().metadata().to_vec();
 
-        // Key-encryption keys are cached for the lifetime of file decryption properties,
-        // and when creating new file decryption properties, a previous key-encryption key cache
+        // Key-encryption keys are cached for the lifetime of a key unwrapper,
+        // and when creating a new key unwrapper, a previous key-encryption key cache
         // may be reused if the cache lifetime hasn't expired and the KMS access token is the same.
 
-        let get_new_decryption_properties = || {
+        let get_new_key_unwrapper = || {
             let decryption_config = DecryptionConfiguration::builder()
                 .set_cache_lifetime(Some(Duration::from_secs(600)))
                 .build();
             crypto_factory
-                .file_decryption_properties(kms_config.clone(), decryption_config)
+                .key_unwrapper(kms_config.clone(), decryption_config)
                 .unwrap()
         };
 
-        let retrieve_key = |props: &FileDecryptionProperties| {
-            props.footer_key(footer_key_metadata.as_deref()).unwrap();
+        let retrieve_key = |key_unwrapper: &KeyUnwrapper| {
+            key_unwrapper.unwrap_key(&footer_key_metadata).unwrap();
         };
 
         assert_eq!(0, kms_factory.keys_unwrapped());
 
         {
-            let props = get_new_decryption_properties();
-            retrieve_key(&props);
+            let key_unwrapper = get_new_key_unwrapper();
+            retrieve_key(&key_unwrapper);
             time_controller.advance(Duration::from_secs(599));
-            retrieve_key(&props);
+            retrieve_key(&key_unwrapper);
             assert_eq!(1, kms_factory.keys_unwrapped());
             assert_eq!(1, crypto_factory.cache_stats().num_kek_read_caches);
         }
         {
-            let props = get_new_decryption_properties();
-            retrieve_key(&props);
+            let key_unwrapper = get_new_key_unwrapper();
+            retrieve_key(&key_unwrapper);
             assert_eq!(1, kms_factory.keys_unwrapped());
             time_controller.advance(Duration::from_secs(1));
-            retrieve_key(&props);
+            retrieve_key(&key_unwrapper);
             // Cache lifetime has expired but the key unwrapper still holds the
             // key encryption key cache.
             assert_eq!(1, kms_factory.keys_unwrapped());
             assert_eq!(1, crypto_factory.cache_stats().num_kek_read_caches);
         }
         {
-            let props = get_new_decryption_properties();
-            retrieve_key(&props);
-            // Newly created decryption properties use a new key encryption key cache
+            let key_unwrapper = get_new_key_unwrapper();
+            retrieve_key(&key_unwrapper);
+            // Newly created key unwrappers use a new key encryption key cache
             assert_eq!(2, kms_factory.keys_unwrapped());
             // Old KEKs have been removed from the cache
             assert_eq!(1, crypto_factory.cache_stats().num_kek_read_caches);
         }
         {
             time_controller.advance(Duration::from_secs(599));
-            // Creating new decryption properties should re-use the more recent cache
-            let props1 = get_new_decryption_properties();
-            retrieve_key(&props1);
+            // Creating a new key unwrapper should re-use the more recent cache
+            let key_unwrapper1 = get_new_key_unwrapper();
+            retrieve_key(&key_unwrapper1);
             assert_eq!(2, kms_factory.keys_unwrapped());
             assert_eq!(1, crypto_factory.cache_stats().num_kek_read_caches);
 
             kms_config.refresh_key_access_token("new_secret".to_owned());
-            // Creating decryption properties with a different access key should require
+            // Creating a key unwrapper with a different access key should require
             // creating a new key encryption key cache.
-            let props2 = get_new_decryption_properties();
-            retrieve_key(&props2);
+            let key_unwrapper2 = get_new_key_unwrapper();
+            retrieve_key(&key_unwrapper2);
             assert_eq!(3, kms_factory.keys_unwrapped());
             // KEKs for old access token are still cached as they haven't expired
             assert_eq!(2, crypto_factory.cache_stats().num_kek_read_caches);
 
-            // But the cache used by older file encryption properties is still usable.
-            retrieve_key(&props1);
+            // But the cache used by the older key unwrapper is still usable.
+            retrieve_key(&key_unwrapper1);
             assert_eq!(3, kms_factory.keys_unwrapped());
         }
     }
@@ -985,27 +979,27 @@ mod tests {
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
 
-        let generate_encryption_props = || {
+        let generate_encryption_keys = || {
             let _ = crypto_factory
-                .file_encryption_properties(kms_config.clone(), &encryption_config)
+                .file_encryption_keys(kms_config.clone(), &encryption_config)
                 .unwrap();
         };
 
         assert_eq!(0, kms_factory.keys_wrapped());
 
-        generate_encryption_props();
+        generate_encryption_keys();
         // We generate 1 KEK for each master key used and wrap it with the KMS
         assert_eq!(3, kms_factory.keys_wrapped());
         assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
 
         time_controller.advance(Duration::from_secs(599));
-        generate_encryption_props();
-        // KEK cache hasn't yet expired, we reused it to generate new props
+        generate_encryption_keys();
+        // KEK cache hasn't yet expired, we reused it to generate new keys
         assert_eq!(3, kms_factory.keys_wrapped());
         assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
 
         time_controller.advance(Duration::from_secs(1));
-        generate_encryption_props();
+        generate_encryption_keys();
         // The KEK cache has now expired, so we generated 3 new KEKs and wrapped them with the KMS
         assert_eq!(6, kms_factory.keys_wrapped());
         // Old KEKs have been removed from the cache
@@ -1014,13 +1008,13 @@ mod tests {
         // Refreshing the access token should invalidate the KEK write cache,
         // requiring us to again generate new KEKs and wrap them with the KMS
         kms_config.refresh_key_access_token("new_secret".to_owned());
-        generate_encryption_props();
+        generate_encryption_keys();
         assert_eq!(9, kms_factory.keys_wrapped());
         // KEKs for old access token are still cached as they haven't expired
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
 
         time_controller.advance(Duration::from_secs(599));
-        generate_encryption_props();
+        generate_encryption_keys();
         // The KEK cache for the refreshed token is still valid, no new KEKs were generated
         assert_eq!(9, kms_factory.keys_wrapped());
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
@@ -1047,18 +1041,18 @@ mod tests {
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
 
-        let generate_encryption_props = |kms_config: &Arc<KmsConnectionConfig>| {
+        let generate_encryption_keys = |kms_config: &Arc<KmsConnectionConfig>| {
             let _ = crypto_factory
-                .file_encryption_properties(kms_config.clone(), &encryption_config)
+                .file_encryption_keys(kms_config.clone(), &encryption_config)
                 .unwrap();
         };
 
-        generate_encryption_props(&kms_config_1);
+        generate_encryption_keys(&kms_config_1);
         assert_eq!(1, kms_factory.keys_wrapped());
         assert_eq!(1, crypto_factory.cache_stats().num_kek_write_caches);
 
         // A new KEK must be generated and wrapped by the second KMS instance
-        generate_encryption_props(&kms_config_2);
+        generate_encryption_keys(&kms_config_2);
         assert_eq!(2, kms_factory.keys_wrapped());
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
         let expected_config = |url: &str| KmsConnectionConfigDetails {
@@ -1076,8 +1070,8 @@ mod tests {
         );
 
         // Cached KEKs are reused for each instance
-        generate_encryption_props(&kms_config_1);
-        generate_encryption_props(&kms_config_2);
+        generate_encryption_keys(&kms_config_1);
+        generate_encryption_keys(&kms_config_2);
         assert_eq!(2, kms_factory.keys_wrapped());
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
     }
@@ -1198,12 +1192,12 @@ mod tests {
             .build()
             .unwrap();
 
-        let file_encryption_properties = {
+        let file_encryption_keys = {
             let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
             let crypto_factory = CryptoFactory::new(kms_factory.clone());
 
             crypto_factory
-                .file_encryption_properties(encryption_kms_config, &encryption_config)
+                .file_encryption_keys(encryption_kms_config, &encryption_config)
                 .unwrap()
         };
 
@@ -1211,16 +1205,12 @@ mod tests {
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
 
         let decryption_kms_config = Arc::new(decryption_kms_config);
-        let decryption_properties = crypto_factory
-            .file_decryption_properties(decryption_kms_config, decryption_config)
+        let key_unwrapper = crypto_factory
+            .key_unwrapper(decryption_kms_config, decryption_config)
             .unwrap();
 
-        let _ = decryption_properties
-            .footer_key(
-                file_encryption_properties
-                    .footer_key_metadata()
-                    .map(|k| k.as_bytes()),
-            )
+        let _ = key_unwrapper
+            .unwrap_key(file_encryption_keys.footer_key().metadata())
             .unwrap();
 
         let mut invocations = kms_factory.invocations();

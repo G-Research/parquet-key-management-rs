@@ -26,6 +26,7 @@ for examples of how to use this library and the full API reference.
 
 The `parquet_key_management` crate provides the following features which may be enabled in your `Cargo.toml`:
 
+- `parquet` - integration with the `parquet` crate (enabled by default)
 - `async` - enables the asynchronous KMS client API
 - `async-std` - enables support for the [async-std](https://crates.io/crates/async-std) runtime in the asynchronous KMS client API
 - `smol` - enables support for the [smol](https://crates.io/crates/smol) runtime in the asynchronous KMS client API

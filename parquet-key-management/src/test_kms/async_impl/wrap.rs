@@ -1,5 +1,5 @@
+use crate::errors::Result;
 use crate::kms::{AsyncKmsClient, KmsClientRef};
-use parquet::errors::Result;
 
 /// An asynchronous KMS client implementation wrapping a synchronous one
 pub(crate) struct WrappingAsyncKmsClient {

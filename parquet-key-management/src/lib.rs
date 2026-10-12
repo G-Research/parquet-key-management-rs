@@ -10,30 +10,56 @@
 //! keys (KEKs) that are then encrypted with MEKs, to reduce KMS interactions.
 //!
 //! # Usage
-//! Using this module requires defining your own type that implements the
+//! Using this crate requires defining your own type that implements the
 //! [`KmsClient`](kms::KmsClient) trait and interacts with your organization's KMS.
+//! This `KmsClient` is then used by a [`CryptoFactory`](crypto_factory::CryptoFactory),
+//! which generates and wraps encryption keys when writing files,
+//! and unwraps them when reading files.
 //!
-//! This `KmsClient` can then be used by the
-//! [`CryptoFactory`](crypto_factory::CryptoFactory) type to generate
-//! [`FileEncryptionProperties`](parquet::encryption::encrypt::FileEncryptionProperties)
-//! for writing encrypted Parquet files and
-//! [`FileDecryptionProperties`](parquet::encryption::decrypt::FileDecryptionProperties)
-//! for reading files.
+//! ## `parquet` crate integration
+//! The [`CryptoFactory`](crypto_factory::CryptoFactory) can directly generate
+//! [`FileEncryptionProperties`] for writing encrypted Parquet files with the
+//! [`parquet`](https://crates.io/crates/parquet) crate, and
+//! [`FileDecryptionProperties`] for reading them.
+//! This requires the `parquet` feature, which is enabled by default.
+//! See the example below.
+//!
+//! To set further encryption options, such as an AAD prefix, use
+//! [`CryptoFactory::file_encryption_keys`](crypto_factory::CryptoFactory::file_encryption_keys)
+//! followed by [`FileEncryptionKeys::into_parquet_builder`](encryption_keys::FileEncryptionKeys::into_parquet_builder).
+//!
+//! ## Use with other Parquet implementations
+//! This crate doesn't depend on any particular Parquet implementation
+//! and the `parquet` feature can be disabled.
+//!
+//! * When writing, [`CryptoFactory::file_encryption_keys`](crypto_factory::CryptoFactory::file_encryption_keys)
+//!   returns [`FileEncryptionKeys`](encryption_keys::FileEncryptionKeys),
+//!   containing the footer key, column keys and their serialized key metadata.
+//! * When reading, [`CryptoFactory::key_unwrapper`](crypto_factory::CryptoFactory::key_unwrapper)
+//!   returns a [`KeyUnwrapper`](key_unwrapper::KeyUnwrapper), whose
+//!   [`unwrap_key`](key_unwrapper::KeyUnwrapper::unwrap_key) method takes the key metadata
+//!   stored in a Parquet file and returns the decrypted key.
 //!
 //! # `async` usage (`async` feature)
-//! This module also provides an [`AsyncKmsClient`](kms::AsyncKmsClient) trait that can be used
-//! with the [`async_reader`] and [`async_writer`] modules.
+//! This crate also provides an [`AsyncKmsClient`](kms::AsyncKmsClient) trait for KMS clients that
+//! need to make asynchronous requests, which can be used with the `parquet` crate's
+//! [`async_reader`] and [`async_writer`] modules.
+//! The `async-std`, `smol` and `tokio` features provide support for those runtimes.
+//! See the example on [`AsyncKmsClient`](kms::AsyncKmsClient).
 //!
-//! See example on [`AsyncKmsClient`](kms::AsyncKmsClient).
+//! # DataFusion integration (`datafusion` feature)
+//! The `datafusion` module provides an `EncryptionFactory` implementation for reading and
+//! writing encrypted Parquet with [Apache DataFusion](https://datafusion.apache.org/).
 //!
 //! # Compatibility
 //! The encryption key metadata that is stored in the Parquet file is compatible with other Parquet
-//! implementations (PyArrow and parquet-java for example), so that files encrypted with this
-//! module may be decrypted by those implementations, and vice versa, as long as the
+//! implementations (PyArrow and parquet-java for example). Files encrypted with this
+//! crate may be decrypted by those implementations, and vice versa, as long as the
 //! `KmsClient` implementations are compatible.
 //!
 //! # Example of writing then reading an encrypted Parquet file
-//! ```
+#![cfg_attr(feature = "parquet", doc = "```")]
+#![cfg_attr(not(feature = "parquet"), doc = "```ignore")]
 //! use arrow_array::{ArrayRef, Float32Array, Int32Array, RecordBatch};
 //! use base64::prelude::BASE64_STANDARD;
 //! use base64::Engine;
@@ -43,7 +69,7 @@
 //!     CryptoFactory, DecryptionConfiguration, EncryptionConfigurationBuilder,
 //! };
 //! use parquet_key_management::kms::{KmsClient, KmsConnectionConfig};
-//! use parquet::errors::{ParquetError, Result};
+//! use parquet_key_management::errors::{Error, Result};
 //! use parquet::file::properties::WriterProperties;
 //! use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
 //! use ring::rand::{SecureRandom, SystemRandom};
@@ -144,10 +170,10 @@
 //!     /// Get the AES key corresponding to a key identifier
 //!     fn get_key(&self, master_key_identifier: &str) -> Result<LessSafeKey> {
 //!         let key = self.key_map.get(master_key_identifier).ok_or_else(|| {
-//!             ParquetError::General(format!("Invalid master key '{master_key_identifier}'"))
+//!             Error::General(format!("Invalid master key '{master_key_identifier}'"))
 //!         })?;
 //!         let key = UnboundKey::new(&AES_128_GCM, key)
-//!             .map_err(|e| ParquetError::General(format!("Error creating AES key '{e}'")))?;
+//!             .map_err(|e| Error::General(format!("Error creating AES key '{e}'")))?;
 //!         Ok(LessSafeKey::new(key))
 //!     }
 //! }
@@ -181,12 +207,12 @@
 //!     /// Take an encrypted key and decrypt it using the specified master key identifier
 //!     fn unwrap_key(&self, wrapped_key: &str, master_key_identifier: &str) -> Result<Vec<u8>> {
 //!         let wrapped_key = BASE64_STANDARD.decode(wrapped_key).map_err(|e| {
-//!             ParquetError::General(format!("Error base64 decoding wrapped key: {e}"))
+//!             Error::General(format!("Error base64 decoding wrapped key: {e}"))
 //!         })?;
 //!         let master_key = self.get_key(master_key_identifier)?;
 //!         let aad = master_key_identifier.as_bytes();
 //!         if wrapped_key.len() < NONCE_LEN + master_key.algorithm().tag_len() {
-//!             return Err(ParquetError::General("Wrapped key is too short".to_owned()));
+//!             return Err(Error::General("Wrapped key is too short".to_owned()));
 //!         }
 //!         let nonce = ring::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
 //!
@@ -200,20 +226,35 @@
 //!     }
 //! }
 //!
-//! # Ok::<(), parquet::errors::ParquetError>(())
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! [`async_reader`]: https://docs.rs/parquet/latest/parquet/arrow/arrow_reader/index.html
+//! [`async_reader`]: https://docs.rs/parquet/latest/parquet/arrow/async_reader/index.html
 //! [`async_writer`]: https://docs.rs/parquet/latest/parquet/arrow/async_writer/index.html
-
+//! [`FileEncryptionProperties`]: https://docs.rs/parquet/latest/parquet/encryption/encrypt/struct.FileEncryptionProperties.html
+//! [`FileDecryptionProperties`]: https://docs.rs/parquet/latest/parquet/encryption/decrypt/struct.FileDecryptionProperties.html
+// Some doc links refer to feature-gated items. These are only checked when building docs
+// with all features enabled, and will be broken links otherwise.
+#![cfg_attr(
+    not(all(
+        feature = "parquet",
+        feature = "async",
+        feature = "async-std",
+        feature = "smol",
+        feature = "tokio"
+    )),
+    allow(rustdoc::broken_intra_doc_links)
+)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod crypto_factory;
 #[cfg(feature = "datafusion")]
 pub mod datafusion;
+pub mod encryption_keys;
+pub mod errors;
 mod key_encryption;
 pub mod key_material;
-mod key_unwrapper;
+pub mod key_unwrapper;
 mod key_wrapper;
 pub mod kms;
 mod kms_manager;

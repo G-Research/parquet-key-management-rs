@@ -1,8 +1,8 @@
+use crate::errors::Result;
 use crate::kms::{
     reenter_async::ReenterAsync, AsyncKmsClientFactory, AsyncKmsClientRef, KmsClient,
     KmsClientFactory, KmsClientRef,
 };
-use parquet::errors::Result;
 use std::sync::Arc;
 
 /// [`KmsClient`] implementation that bridges to an asynchronous

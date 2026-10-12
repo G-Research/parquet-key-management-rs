@@ -5,10 +5,10 @@
 #[cfg(feature = "async")]
 mod async_impl;
 
+use crate::errors::{Error, Result};
 use crate::kms::{KmsClient, KmsClientFactory, KmsClientRef, KmsConnectionConfig};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use parquet::errors::{ParquetError, Result};
 use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
 use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
@@ -116,10 +116,10 @@ impl TestKmsClient {
 
     fn get_key(&self, master_key_identifier: &str) -> Result<LessSafeKey> {
         let key = self.key_map.get(master_key_identifier).ok_or_else(|| {
-            ParquetError::General(format!("Invalid master key '{master_key_identifier}'"))
+            Error::General(format!("Invalid master key '{master_key_identifier}'"))
         })?;
         let key = UnboundKey::new(&AES_128_GCM, key)
-            .map_err(|e| ParquetError::General(format!("Error creating AES key '{e}'")))?;
+            .map_err(|e| Error::General(format!("Error creating AES key '{e}'")))?;
         Ok(LessSafeKey::new(key))
     }
 }
@@ -152,13 +152,13 @@ impl KmsClient for TestKmsClient {
         let key = self.get_key(master_key_identifier)?;
         let aad = master_key_identifier.as_bytes();
 
-        let wrapped_key = BASE64_STANDARD.decode(wrapped_key).map_err(|e| {
-            ParquetError::General(format!("Error base64 decoding wrapped key: {e}"))
-        })?;
+        let wrapped_key = BASE64_STANDARD
+            .decode(wrapped_key)
+            .map_err(|e| Error::General(format!("Error base64 decoding wrapped key: {e}")))?;
 
         let tag_len = key.algorithm().tag_len();
         if wrapped_key.len() < NONCE_LEN + tag_len {
-            return Err(ParquetError::General("Wrapped key is too short".to_owned()));
+            return Err(Error::General("Wrapped key is too short".to_owned()));
         }
 
         let nonce = ring::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
