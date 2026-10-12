@@ -629,6 +629,7 @@ mod tests {
 
     #[test]
     fn test_kms_client_caching_with_different_urls() {
+        let _time_controller = crate::kms_manager::mock_time::time_controller();
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
         // The KMS config is updated from the footer key metadata per file,
@@ -689,6 +690,7 @@ mod tests {
 
     #[test]
     fn test_kms_client_caching_with_default_instance() {
+        let _time_controller = crate::kms_manager::mock_time::time_controller();
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
         // Instance ID and URL are not set, so default values are used
@@ -1023,6 +1025,7 @@ mod tests {
     /// KEKs wrapped by one KMS instance must not be reused when encrypting with another instance
     #[test]
     fn test_encryption_key_encryption_key_caching_with_different_urls() {
+        let _time_controller = crate::kms_manager::mock_time::time_controller();
         let kms_config = |url: &str| {
             Arc::new(
                 KmsConnectionConfig::builder()

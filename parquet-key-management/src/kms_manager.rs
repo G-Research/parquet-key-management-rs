@@ -281,6 +281,15 @@ pub mod mock_time {
         }
     }
 
+    impl Drop for TimeController {
+        fn drop(&mut self) {
+            // Revert to using the real time so that tests not holding a controller
+            // don't observe mocked time left over from a previous test
+            let mut now_lock = MOCK_NOW.write().unwrap();
+            *now_lock = None;
+        }
+    }
+
     /// Get the current time
     pub fn now() -> Instant {
         let now_lock = MOCK_NOW.read().unwrap();
