@@ -299,3 +299,76 @@ pub mod mock_time {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::errors::Error;
+    use crate::kms::KmsClient;
+    use std::sync::mpsc;
+    use std::thread;
+
+    struct NoOpKmsClient;
+
+    impl KmsClient for NoOpKmsClient {
+        fn wrap_key(&self, _key_bytes: &[u8], _master_key_identifier: &str) -> Result<String> {
+            Err(Error::General("Not implemented".to_owned()))
+        }
+
+        fn unwrap_key(&self, _wrapped_key: &str, _master_key_identifier: &str) -> Result<Vec<u8>> {
+            Err(Error::General("Not implemented".to_owned()))
+        }
+    }
+
+    /// A KMS client factory that refreshes the access token from another thread
+    /// while a client is being created, then reads the token.
+    struct RefreshingKmsClientFactory {
+        refresh_thread: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
+    }
+
+    impl KmsClientFactory for RefreshingKmsClientFactory {
+        fn create_client(
+            &self,
+            kms_connection_config: &KmsConnectionConfig,
+        ) -> Result<KmsClientRef> {
+            let config = kms_connection_config.clone();
+            let refresh_thread = thread::spawn(move || {
+                config.refresh_key_access_token("refreshed_token".to_owned());
+            });
+            // Give the refresh thread time to start waiting for the write lock.
+            // The refresh can't complete until client creation finishes and the
+            // read lock held by the KmsManager is released.
+            thread::sleep(Duration::from_millis(100));
+            let _token = kms_connection_config.key_access_token();
+            *self.refresh_thread.lock().unwrap() = Some(refresh_thread);
+            Ok(Arc::new(NoOpKmsClient))
+        }
+    }
+
+    #[test]
+    fn test_refresh_token_during_client_creation() {
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let refresh_thread = Arc::new(Mutex::new(None));
+            let kms_manager = KmsManager::new(RefreshingKmsClientFactory {
+                refresh_thread: refresh_thread.clone(),
+            });
+            let config = Arc::new(
+                KmsConnectionConfig::builder()
+                    .set_key_access_token("initial_token".to_owned())
+                    .build(),
+            );
+            let result = kms_manager.get_client(&config, None).map(|_| ());
+            if let Some(refresh_thread) = refresh_thread.lock().unwrap().take() {
+                refresh_thread.join().unwrap();
+            }
+            assert_eq!(config.key_access_token(), "refreshed_token");
+            sender.send(result).unwrap();
+        });
+
+        let result = receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("Deadlock creating KMS client while refreshing the access token");
+        result.unwrap();
+    }
+}
