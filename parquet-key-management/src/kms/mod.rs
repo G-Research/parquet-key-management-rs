@@ -6,6 +6,7 @@ mod async_impl;
 use crate::errors::Result;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 
@@ -28,7 +29,7 @@ pub trait KmsClient: Send + Sync {
 pub type KmsClientRef = Arc<dyn KmsClient>;
 
 /// Holds configuration options required to connect to a KMS
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct KmsConnectionConfig {
     /// The URL of the KMS to connect to. May be set to "DEFAULT" before being passed to a
     /// KmsClientFactory if it hasn't been set, to indicate that the default KMS URL should be used.
@@ -106,6 +107,23 @@ impl KmsConnectionConfig {
             config.kms_instance_url = "DEFAULT".to_owned();
         }
         Cow::Owned(config)
+    }
+}
+
+impl fmt::Debug for KmsConnectionConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Don't expose the access token, only indicate whether one has been set
+        let token = self.read_key_access_token();
+        let key_access_token = match token.as_str() {
+            token @ ("" | "DEFAULT") => token,
+            _ => "<redacted>",
+        };
+        f.debug_struct("KmsConnectionConfig")
+            .field("kms_instance_url", &self.kms_instance_url)
+            .field("kms_instance_id", &self.kms_instance_id)
+            .field("key_access_token", &key_access_token)
+            .field("custom_kms_conf", &self.custom_kms_conf)
+            .finish()
     }
 }
 
@@ -209,5 +227,37 @@ where
 {
     fn create_client(&self, kms_connection_config: &KmsConnectionConfig) -> Result<KmsClientRef> {
         self(kms_connection_config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_redacts_key_access_token() {
+        let config = KmsConnectionConfig::builder()
+            .set_kms_instance_id("kms-id".to_owned())
+            .set_kms_instance_url("https://kms.example.com".to_owned())
+            .set_key_access_token("secret-token".to_owned())
+            .build();
+        let debug = format!("{config:?}");
+        assert!(!debug.contains("secret-token"), "{debug}");
+        assert!(debug.contains("<redacted>"), "{debug}");
+        assert!(debug.contains("kms-id"), "{debug}");
+        assert!(debug.contains("https://kms.example.com"), "{debug}");
+
+        config.refresh_key_access_token("refreshed-token".to_owned());
+        let debug = format!("{config:?}");
+        assert!(!debug.contains("refreshed-token"), "{debug}");
+        assert!(debug.contains("<redacted>"), "{debug}");
+    }
+
+    #[test]
+    fn debug_shows_unset_key_access_token() {
+        let config = KmsConnectionConfig::default();
+        let debug = format!("{config:?}");
+        assert!(debug.contains("key_access_token: \"DEFAULT\""), "{debug}");
+        assert!(!debug.contains("<redacted>"), "{debug}");
     }
 }
