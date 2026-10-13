@@ -267,6 +267,16 @@ mod tests {
     }
 
     #[test]
+    fn debug_shows_empty_key_access_token() {
+        let config = KmsConnectionConfig::builder()
+            .set_key_access_token("".to_owned())
+            .build();
+        let debug = format!("{config:?}");
+        assert!(debug.contains("key_access_token: \"\""), "{debug}");
+        assert!(!debug.contains("<redacted>"), "{debug}");
+    }
+
+    #[test]
     fn debug_does_not_block_while_token_is_locked() {
         let config = KmsConnectionConfig::builder()
             .set_key_access_token("secret-token".to_owned())
