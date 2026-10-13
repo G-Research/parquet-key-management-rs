@@ -56,10 +56,10 @@ impl<R: ReenterAsync> BridgeKmsClientFactory<R> {
 impl<R: ReenterAsync> KmsClientFactory for BridgeKmsClientFactory<R> {
     fn create_client(
         &self,
-        kms_connection_config: &crate::kms::KmsConnectionConfig,
+        kms_connection_info: &crate::kms::KmsConnectionInfo,
     ) -> Result<KmsClientRef> {
         self.reenter.reenter(async move {
-            let client = self.inner.create_client(kms_connection_config).await?;
+            let client = self.inner.create_client(kms_connection_info).await?;
             Ok(Arc::new(BridgeKmsClient::new(self.reenter.clone(), client)) as KmsClientRef)
         })
     }

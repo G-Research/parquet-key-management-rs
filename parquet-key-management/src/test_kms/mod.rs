@@ -6,7 +6,7 @@
 mod async_impl;
 
 use crate::errors::{Error, Result};
-use crate::kms::{KmsClient, KmsClientFactory, KmsClientRef, KmsConnectionConfig};
+use crate::kms::{KmsClient, KmsClientFactory, KmsClientRef, KmsConnectionInfo};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
@@ -25,23 +25,10 @@ pub struct TestKmsClient {
     keys_unwrapped: Arc<AtomicUsize>,
 }
 
-/// Properties from [`KmsConnectionConfig`] used to construct a KMS client
-#[derive(Clone, Debug, PartialEq)]
-pub struct KmsConnectionConfigDetails {
-    /// The KMS instance id
-    pub kms_instance_id: String,
-    /// The KMS instance URL
-    pub kms_instance_url: String,
-    /// The KMS key access token
-    pub key_access_token: String,
-    /// Arbitrary KMS configuration options
-    pub custom_kms_conf: HashMap<String, String>,
-}
-
 /// Factory for building [`TestKmsClient`] instances
 pub struct TestKmsClientFactory {
     key_map: HashMap<String, Vec<u8>>,
-    invocations: Mutex<Vec<KmsConnectionConfigDetails>>,
+    invocations: Mutex<Vec<KmsConnectionInfo>>,
     keys_wrapped: Arc<AtomicUsize>,
     keys_unwrapped: Arc<AtomicUsize>,
 }
@@ -65,7 +52,7 @@ impl TestKmsClientFactory {
 
     /// Get the configuration details used to create clients.
     /// Provided for unit testing
-    pub fn invocations(&self) -> Vec<KmsConnectionConfigDetails> {
+    pub fn invocations(&self) -> Vec<KmsConnectionInfo> {
         self.invocations.lock().unwrap().clone()
     }
 
@@ -81,17 +68,11 @@ impl TestKmsClientFactory {
 }
 
 impl KmsClientFactory for TestKmsClientFactory {
-    fn create_client(&self, kms_connection_config: &KmsConnectionConfig) -> Result<KmsClientRef> {
-        {
-            let details = KmsConnectionConfigDetails {
-                kms_instance_id: kms_connection_config.kms_instance_id().to_owned(),
-                kms_instance_url: kms_connection_config.kms_instance_url().to_owned(),
-                key_access_token: kms_connection_config.key_access_token(),
-                custom_kms_conf: kms_connection_config.custom_kms_conf().clone(),
-            };
-            let mut invocations = self.invocations.lock().unwrap();
-            invocations.push(details);
-        }
+    fn create_client(&self, kms_connection_info: &KmsConnectionInfo) -> Result<KmsClientRef> {
+        self.invocations
+            .lock()
+            .unwrap()
+            .push(kms_connection_info.clone());
         Ok(Arc::new(TestKmsClient::new(
             self.key_map.clone(),
             self.keys_wrapped.clone(),
