@@ -1,14 +1,13 @@
 use crate::errors::Result;
 use crate::kms::{KmsClientFactory, KmsClientRef, KmsConnectionConfig, KmsConnectionInfo};
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
 
 /// Cache of key encryption keys (KEKs) to use when decrypting files,
 /// keyed by their base64 encoded key id
-pub(crate) type KekReadCache = Arc<Mutex<HashMap<String, Vec<u8>>>>;
+pub(crate) type KekReadCache = Arc<ExpiringCache<String, Vec<u8>>>;
 
 // Key encryption key (KEK) struct with extra metadata required when encrypting files
 pub(crate) struct KeyEncryptionKey {
@@ -20,7 +19,7 @@ pub(crate) struct KeyEncryptionKey {
 
 /// Cache of key encryption keys (KEKs) used when encrypting files,
 /// keyed by the corresponding master key identifier.
-pub(crate) type KekWriteCache = Arc<Mutex<HashMap<String, KeyEncryptionKey>>>;
+pub(crate) type KekWriteCache = Arc<ExpiringCache<String, Arc<KeyEncryptionKey>>>;
 
 /// Manages caching KMS clients and KEK caches
 pub(crate) struct KmsManager {
@@ -67,9 +66,7 @@ impl KmsManager {
         self.clear_expired_entries(cache_lifetime);
         let key = KekCacheKey::new(kms_connection_config.key_access_token().clone());
         self.kek_read_caches
-            .get_or_create(key, cache_lifetime, || {
-                Ok(Arc::new(Mutex::new(Default::default())))
-            })
+            .get_or_create(key, cache_lifetime, || Ok(Arc::new(ExpiringCache::new())))
             .unwrap()
     }
 
@@ -82,9 +79,7 @@ impl KmsManager {
         // KEKs are wrapped by a specific KMS instance, so they can't be shared between instances
         let key = KmsInstanceKey::new(&kms_connection_config.connection_info());
         self.kek_write_caches
-            .get_or_create(key, cache_lifetime, || {
-                Ok(Arc::new(Mutex::new(Default::default())))
-            })
+            .get_or_create(key, cache_lifetime, || Ok(Arc::new(ExpiringCache::new())))
             .unwrap()
     }
 
@@ -99,17 +94,25 @@ impl KmsManager {
     #[cfg(test)]
     pub fn cache_stats(&self) -> CacheStats {
         CacheStats {
-            num_kms_clients: self.kms_client_cache.cache.lock().unwrap().len(),
-            num_kek_read_caches: self.kek_read_caches.cache.lock().unwrap().len(),
-            num_kek_write_caches: self.kek_write_caches.cache.lock().unwrap().len(),
+            num_kms_clients: self.kms_client_cache.len(),
+            num_kek_read_caches: self.kek_read_caches.len(),
+            num_kek_write_caches: self.kek_write_caches.len(),
         }
     }
 }
 
-struct ExpiringCache<TKey, TValue> {
-    cache: Mutex<HashMap<TKey, ExpiringCacheValue<TValue>>>,
+/// A cache of values that are created on demand and may expire.
+///
+/// Each key has its own slot with a separate lock, so that creating a value for one key,
+/// which may involve calling user code and making network requests, doesn't block access
+/// to other keys. Concurrent requests for the same missing key wait for the first request
+/// to create the value rather than duplicating the work.
+pub(crate) struct ExpiringCache<TKey, TValue> {
+    slots: Mutex<HashMap<TKey, Arc<CacheSlot<TValue>>>>,
     last_cleanup: Mutex<Instant>,
 }
+
+type CacheSlot<TValue> = Mutex<Option<ExpiringCacheValue<TValue>>>;
 
 #[derive(Debug)]
 struct ExpiringCacheValue<TValue> {
@@ -133,6 +136,10 @@ impl<TValue> ExpiringCacheValue<TValue> {
     }
 }
 
+fn has_valid_value<TValue>(slot: &Option<ExpiringCacheValue<TValue>>) -> bool {
+    slot.as_ref().is_some_and(|value| value.is_valid())
+}
+
 impl<TKey, TValue> ExpiringCache<TKey, TValue>
 where
     TKey: Clone + Eq + Hash,
@@ -140,11 +147,14 @@ where
 {
     pub fn new() -> Self {
         Self {
-            cache: Mutex::new(HashMap::default()),
+            slots: Mutex::new(HashMap::default()),
             last_cleanup: Mutex::new(now()),
         }
     }
 
+    /// Get the cached value for a key, or create it if there is no valid cached value.
+    /// The creator function is called without holding the lock on the whole cache,
+    /// so it only blocks other requests for the same key.
     pub fn get_or_create<F>(
         &self,
         key: TKey,
@@ -154,16 +164,15 @@ where
     where
         F: FnOnce() -> Result<TValue>,
     {
-        let mut cache = self.cache.lock().unwrap();
-        let entry = cache.entry(key);
-        match entry {
-            Entry::Occupied(entry) if entry.get().is_valid() => Ok(entry.get().value.clone()),
-            entry => {
+        let slot = self.slots.lock().unwrap().entry(key).or_default().clone();
+        // The lock is only poisoned if a creator function panicked, which leaves either no value
+        // or a previously cached value in the slot, so it's safe to ignore the poisoning.
+        let mut slot = slot.lock().unwrap_or_else(PoisonError::into_inner);
+        match &*slot {
+            Some(value) if value.is_valid() => Ok(value.value.clone()),
+            _ => {
                 let value = creator()?;
-                // Can change this to use entry.insert_entry once MSRV >= 1.83.0
-                entry
-                    .and_modify(|e| *e = ExpiringCacheValue::new(value.clone(), cache_lifetime))
-                    .or_insert_with(|| ExpiringCacheValue::new(value.clone(), cache_lifetime));
+                *slot = Some(ExpiringCacheValue::new(value.clone(), cache_lifetime));
                 Ok(value)
             }
         }
@@ -180,14 +189,30 @@ where
             *last_cleanup = instant_now;
         }
 
-        let mut cache = self.cache.lock().unwrap();
-        let to_remove: Vec<TKey> = cache
-            .iter()
-            .filter_map(|(k, v)| if v.is_valid() { None } else { Some(k.clone()) })
-            .collect();
-        for k in to_remove {
-            cache.remove(&k);
-        }
+        self.slots
+            .lock()
+            .unwrap()
+            .retain(|_, slot| match slot.try_lock() {
+                Ok(slot) => has_valid_value(&slot),
+                Err(TryLockError::Poisoned(slot)) => has_valid_value(&slot.into_inner()),
+                // A value is currently being created for this key
+                Err(TryLockError::WouldBlock) => true,
+            });
+    }
+
+    /// Get the number of values in the cache, including expired values that haven't been removed
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.slots
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|slot| {
+                slot.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .is_some()
+            })
+            .count()
     }
 }
 
@@ -299,7 +324,8 @@ mod tests {
     use super::*;
     use crate::errors::Error;
     use crate::kms::KmsClient;
-    use std::sync::mpsc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{mpsc, Barrier};
     use std::thread;
 
     struct NoOpKmsClient;
@@ -361,5 +387,115 @@ mod tests {
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => panic!("Client creation thread panicked"),
         }
+    }
+
+    /// Run a function on another thread and panic if it doesn't complete within a timeout
+    fn run_with_timeout<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || sender.send(f()).unwrap());
+        receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("Operation did not complete")
+    }
+
+    #[test]
+    fn test_cache_creation_does_not_block_other_keys() {
+        let cache = Arc::new(ExpiringCache::<&str, i32>::new());
+        let (started_sender, started_receiver) = mpsc::channel();
+        let (release_sender, release_receiver) = mpsc::channel::<()>();
+
+        let slow_creation = {
+            let cache = cache.clone();
+            thread::spawn(move || {
+                cache.get_or_create("a", None, || {
+                    started_sender.send(()).unwrap();
+                    release_receiver.recv().unwrap();
+                    Ok(1)
+                })
+            })
+        };
+        started_receiver.recv().unwrap();
+
+        // Other keys can be created and read while a value is being created for "a"
+        let value = run_with_timeout({
+            let cache = cache.clone();
+            move || cache.get_or_create("b", None, || Ok(2)).unwrap()
+        });
+        assert_eq!(value, 2);
+        let value = run_with_timeout({
+            let cache = cache.clone();
+            move || {
+                cache
+                    .get_or_create("b", None, || panic!("Should be cached"))
+                    .unwrap()
+            }
+        });
+        assert_eq!(value, 2);
+
+        // Clearing expired entries doesn't wait for the value to be created
+        run_with_timeout({
+            let cache = cache.clone();
+            move || cache.clear_expired(Duration::ZERO)
+        });
+
+        release_sender.send(()).unwrap();
+        assert_eq!(slow_creation.join().unwrap().unwrap(), 1);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn test_cache_concurrent_requests_create_value_once() {
+        let cache = Arc::new(ExpiringCache::<&str, i32>::new());
+        let creation_count = Arc::new(AtomicUsize::new(0));
+        let num_threads = 8;
+        let barrier = Arc::new(Barrier::new(num_threads));
+
+        let threads: Vec<_> = (0..num_threads)
+            .map(|_| {
+                let cache = cache.clone();
+                let creation_count = creation_count.clone();
+                let barrier = barrier.clone();
+                thread::spawn(move || {
+                    barrier.wait();
+                    cache.get_or_create("a", None, || {
+                        creation_count.fetch_add(1, Ordering::SeqCst);
+                        thread::sleep(Duration::from_millis(50));
+                        Ok(1)
+                    })
+                })
+            })
+            .collect();
+
+        for thread in threads {
+            assert_eq!(thread.join().unwrap().unwrap(), 1);
+        }
+        assert_eq!(creation_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn test_cache_creation_panic_does_not_poison_cache() {
+        let cache = Arc::new(ExpiringCache::<&str, i32>::new());
+
+        let result = thread::spawn({
+            let cache = cache.clone();
+            move || cache.get_or_create("a", None, || panic!("Creation failed"))
+        })
+        .join();
+        assert!(result.is_err());
+
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.get_or_create("a", None, || Ok(1)).unwrap(), 1);
+        assert_eq!(cache.get_or_create("b", None, || Ok(2)).unwrap(), 2);
+        cache.clear_expired(Duration::ZERO);
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn test_cache_creation_error_is_not_cached() {
+        let cache = ExpiringCache::<&str, i32>::new();
+        let result = cache.get_or_create("a", None, || Err(Error::General("Failed".to_owned())));
+        assert!(result.is_err());
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.get_or_create("a", None, || Ok(1)).unwrap(), 1);
     }
 }
