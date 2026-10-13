@@ -1,5 +1,5 @@
 use crate::errors::Result;
-use crate::kms::{KmsClientFactory, KmsClientRef, KmsConnectionConfig};
+use crate::kms::{KmsClientFactory, KmsClientRef, KmsConnectionConfig, KmsConnectionInfo};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -49,19 +49,13 @@ impl KmsManager {
         cache_lifetime: Option<Duration>,
     ) -> Result<KmsClientRef> {
         self.clear_expired_entries(cache_lifetime);
-        let kms_connection_config = kms_connection_config.with_defaults_filled();
-        // Hold a read lock while the KMS is created to prevent a race condition where the token
-        // could be updated after we read it but before the KMS client factory reads it.
-        let key_access_token = kms_connection_config.read_key_access_token();
-        let key = KmsInstanceKey::new(
-            key_access_token.clone(),
-            kms_connection_config.kms_instance_id().to_owned(),
-            kms_connection_config.kms_instance_url().to_owned(),
-        );
+        // Take a snapshot of the connection config so that the cache key and created client
+        // use the same access token, even if the token is refreshed concurrently.
+        let kms_connection_info = kms_connection_config.connection_info();
+        let key = KmsInstanceKey::new(&kms_connection_info);
         self.kms_client_cache
             .get_or_create(key, cache_lifetime, || {
-                self.kms_client_factory
-                    .create_client(&kms_connection_config)
+                self.kms_client_factory.create_client(&kms_connection_info)
             })
     }
 
@@ -86,12 +80,7 @@ impl KmsManager {
     ) -> KekWriteCache {
         self.clear_expired_entries(cache_lifetime);
         // KEKs are wrapped by a specific KMS instance, so they can't be shared between instances
-        let kms_connection_config = kms_connection_config.with_defaults_filled();
-        let key = KmsInstanceKey::new(
-            kms_connection_config.key_access_token().clone(),
-            kms_connection_config.kms_instance_id().to_owned(),
-            kms_connection_config.kms_instance_url().to_owned(),
-        );
+        let key = KmsInstanceKey::new(&kms_connection_config.connection_info());
         self.kek_write_caches
             .get_or_create(key, cache_lifetime, || {
                 Ok(Arc::new(Mutex::new(Default::default())))
@@ -211,15 +200,11 @@ struct KmsInstanceKey {
 }
 
 impl KmsInstanceKey {
-    pub fn new(
-        key_access_token: String,
-        kms_instance_id: String,
-        kms_instance_url: String,
-    ) -> Self {
+    pub fn new(kms_connection_info: &KmsConnectionInfo) -> Self {
         Self {
-            key_access_token,
-            kms_instance_id,
-            kms_instance_url,
+            key_access_token: kms_connection_info.key_access_token().to_owned(),
+            kms_instance_id: kms_connection_info.kms_instance_id().to_owned(),
+            kms_instance_url: kms_connection_info.kms_instance_url().to_owned(),
         }
     }
 }
@@ -296,6 +281,76 @@ pub mod mock_time {
         }
         TimeController {
             _control_guard: control_guard,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::errors::Error;
+    use crate::kms::KmsClient;
+    use std::sync::mpsc;
+    use std::thread;
+
+    struct NoOpKmsClient;
+
+    impl KmsClient for NoOpKmsClient {
+        fn wrap_key(&self, _key_bytes: &[u8], _master_key_identifier: &str) -> Result<String> {
+            Err(Error::General("Not implemented".to_owned()))
+        }
+
+        fn unwrap_key(&self, _wrapped_key: &str, _master_key_identifier: &str) -> Result<Vec<u8>> {
+            Err(Error::General("Not implemented".to_owned()))
+        }
+    }
+
+    /// A KMS client factory that refreshes the access token from another thread
+    /// while a client is being created.
+    struct RefreshingKmsClientFactory {
+        kms_connection_config: Arc<KmsConnectionConfig>,
+    }
+
+    impl KmsClientFactory for RefreshingKmsClientFactory {
+        fn create_client(&self, kms_connection_info: &KmsConnectionInfo) -> Result<KmsClientRef> {
+            let config = self.kms_connection_config.clone();
+            thread::spawn(move || {
+                config.refresh_key_access_token("refreshed_token".to_owned());
+            })
+            .join()
+            .unwrap();
+            // The client is created with the token that was used for the cache key
+            assert_eq!(kms_connection_info.key_access_token(), "initial_token");
+            assert_eq!(
+                self.kms_connection_config.key_access_token(),
+                "refreshed_token"
+            );
+            Ok(Arc::new(NoOpKmsClient))
+        }
+    }
+
+    #[test]
+    fn test_refresh_token_during_client_creation() {
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let config = Arc::new(
+                KmsConnectionConfig::builder()
+                    .set_key_access_token("initial_token".to_owned())
+                    .build(),
+            );
+            let kms_manager = KmsManager::new(RefreshingKmsClientFactory {
+                kms_connection_config: config.clone(),
+            });
+            let result = kms_manager.get_client(&config, None).map(|_| ());
+            sender.send(result).unwrap();
+        });
+
+        match receiver.recv_timeout(Duration::from_secs(10)) {
+            Ok(result) => result.unwrap(),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                panic!("Deadlock creating KMS client while refreshing the access token")
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => panic!("Client creation thread panicked"),
         }
     }
 }

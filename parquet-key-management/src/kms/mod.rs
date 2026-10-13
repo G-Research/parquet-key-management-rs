@@ -6,8 +6,9 @@ mod async_impl;
 use crate::errors::Result;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt;
 use std::ops::Deref;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 
 #[cfg(feature = "async")]
 pub(crate) use async_impl::bridge::BridgeKmsClientFactory;
@@ -64,11 +65,6 @@ impl KmsConnectionConfig {
         self.key_access_token.read().unwrap().clone()
     }
 
-    /// Return the key access token inside a read lock.
-    pub(crate) fn read_key_access_token(&self) -> RwLockReadGuard<'_, String> {
-        self.key_access_token.read().unwrap()
-    }
-
     /// Any KMS specific configuration options
     pub fn custom_kms_conf(&self) -> &HashMap<String, String> {
         &self.custom_kms_conf
@@ -106,6 +102,18 @@ impl KmsConnectionConfig {
             config.kms_instance_url = "DEFAULT".to_owned();
         }
         Cow::Owned(config)
+    }
+
+    /// Get a snapshot of this configuration to pass to a [`KmsClientFactory`],
+    /// with an empty KMS instance ID or URL replaced with "DEFAULT"
+    pub(crate) fn connection_info(&self) -> KmsConnectionInfo {
+        let config = self.with_defaults_filled();
+        KmsConnectionInfo {
+            kms_instance_url: config.kms_instance_url.clone(),
+            kms_instance_id: config.kms_instance_id.clone(),
+            key_access_token: config.key_access_token(),
+            custom_kms_conf: config.custom_kms_conf.clone(),
+        }
     }
 }
 
@@ -182,6 +190,57 @@ impl Default for KmsConnectionConfigBuilder {
     }
 }
 
+/// Read-only KMS connection details used to create a [`KmsClient`].
+///
+/// This is a snapshot of a [`KmsConnectionConfig`] taken when a client is created,
+/// so the access token will not change if the configuration's token is refreshed.
+/// Refreshing the token causes a new client to be created with the new token.
+#[derive(Clone, PartialEq, Eq)]
+pub struct KmsConnectionInfo {
+    pub(crate) kms_instance_url: String,
+    pub(crate) kms_instance_id: String,
+    pub(crate) key_access_token: String,
+    pub(crate) custom_kms_conf: HashMap<String, String>,
+}
+
+impl KmsConnectionInfo {
+    /// ID of the KMS instance to use, or "DEFAULT" if it wasn't set.
+    pub fn kms_instance_id(&self) -> &str {
+        &self.kms_instance_id
+    }
+
+    /// URL of the KMS instance to use, or "DEFAULT" if it wasn't set.
+    pub fn kms_instance_url(&self) -> &str {
+        &self.kms_instance_url
+    }
+
+    /// The access token to pass to the KMS.
+    pub fn key_access_token(&self) -> &str {
+        &self.key_access_token
+    }
+
+    /// Any KMS specific configuration options
+    pub fn custom_kms_conf(&self) -> &HashMap<String, String> {
+        &self.custom_kms_conf
+    }
+}
+
+impl fmt::Debug for KmsConnectionInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Don't expose the access token, only indicate whether one has been set
+        let key_access_token = match self.key_access_token.as_str() {
+            token @ ("" | "DEFAULT") => token,
+            _ => "<redacted>",
+        };
+        f.debug_struct("KmsConnectionInfo")
+            .field("kms_instance_url", &self.kms_instance_url)
+            .field("kms_instance_id", &self.kms_instance_id)
+            .field("key_access_token", &key_access_token)
+            .field("custom_kms_conf", &self.custom_kms_conf)
+            .finish()
+    }
+}
+
 /// Trait for factories that create KMS clients
 pub trait KmsClientFactory: Send + Sync {
     /// Create a new [`KmsClient`] instance using the provided configuration.
@@ -191,23 +250,66 @@ pub trait KmsClientFactory: Send + Sync {
     /// Created clients are cached by the KMS instance ID, KMS instance URL and key access token.
     /// Custom KMS configuration options are not part of the cache key, so if multiple
     /// configurations differ only in their custom options, they will share the same client.
-    fn create_client(&self, kms_connection_config: &KmsConnectionConfig) -> Result<KmsClientRef>;
+    fn create_client(&self, kms_connection_info: &KmsConnectionInfo) -> Result<KmsClientRef>;
 }
 
 impl<T> KmsClientFactory for Arc<T>
 where
     T: KmsClientFactory,
 {
-    fn create_client(&self, kms_connection_config: &KmsConnectionConfig) -> Result<KmsClientRef> {
-        self.deref().create_client(kms_connection_config)
+    fn create_client(&self, kms_connection_info: &KmsConnectionInfo) -> Result<KmsClientRef> {
+        self.deref().create_client(kms_connection_info)
     }
 }
 
 impl<T> KmsClientFactory for T
 where
-    T: Fn(&KmsConnectionConfig) -> Result<KmsClientRef> + Send + Sync + 'static,
+    T: Fn(&KmsConnectionInfo) -> Result<KmsClientRef> + Send + Sync + 'static,
 {
-    fn create_client(&self, kms_connection_config: &KmsConnectionConfig) -> Result<KmsClientRef> {
-        self(kms_connection_config)
+    fn create_client(&self, kms_connection_info: &KmsConnectionInfo) -> Result<KmsClientRef> {
+        self(kms_connection_info)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn connection_info_debug_redacts_key_access_token() {
+        let config = KmsConnectionConfig::builder()
+            .set_kms_instance_id("kms-id".to_owned())
+            .set_kms_instance_url("https://kms.example.com".to_owned())
+            .set_key_access_token("secret-token".to_owned())
+            .build();
+        let debug = format!("{:?}", config.connection_info());
+        assert!(!debug.contains("secret-token"), "{debug}");
+        assert!(debug.contains("<redacted>"), "{debug}");
+        assert!(debug.contains("kms-id"), "{debug}");
+        assert!(debug.contains("https://kms.example.com"), "{debug}");
+    }
+
+    #[test]
+    fn connection_info_debug_shows_unset_key_access_token() {
+        let config = KmsConnectionConfig::default();
+        let debug = format!("{:?}", config.connection_info());
+        assert!(debug.contains("key_access_token: \"DEFAULT\""), "{debug}");
+        assert!(!debug.contains("<redacted>"), "{debug}");
+    }
+
+    #[test]
+    fn connection_info_is_not_affected_by_refresh() {
+        let config = KmsConnectionConfig::builder()
+            .set_key_access_token("initial-token".to_owned())
+            .build();
+        let info = config.connection_info();
+        assert_eq!(info.kms_instance_id(), "DEFAULT");
+        assert_eq!(info.kms_instance_url(), "DEFAULT");
+        config.refresh_key_access_token("refreshed-token".to_owned());
+        assert_eq!(info.key_access_token(), "initial-token");
+        assert_eq!(
+            config.connection_info().key_access_token(),
+            "refreshed-token"
+        );
     }
 }

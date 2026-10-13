@@ -5,7 +5,7 @@ pub(crate) mod bridge;
 pub mod reenter_async;
 
 use crate::errors::Result;
-use crate::kms::KmsConnectionConfig;
+use crate::kms::KmsConnectionInfo;
 use futures::future::BoxFuture;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -29,7 +29,9 @@ use std::sync::Arc;
 /// use parquet_key_management::crypto_factory::{
 ///     CryptoFactory, DecryptionConfiguration, EncryptionConfigurationBuilder,
 /// };
-/// use parquet_key_management::kms::{AsyncKmsClient, AsyncKmsClientRef, KmsConnectionConfig};
+/// use parquet_key_management::kms::{
+///     AsyncKmsClient, AsyncKmsClientRef, KmsConnectionConfig, KmsConnectionInfo,
+/// };
 /// use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
 /// use ring::rand::{SecureRandom, SystemRandom};
 /// use std::collections::HashMap;
@@ -119,7 +121,7 @@ use std::sync::Arc;
 ///     }
 ///
 ///     impl DemoKmsClient {
-///         pub fn create(_config: &KmsConnectionConfig) -> BoxFuture<'_, Result<AsyncKmsClientRef>> {
+///         pub fn create(_info: &KmsConnectionInfo) -> BoxFuture<'_, Result<AsyncKmsClientRef>> {
 ///             async {
 ///                 let mut key_map = HashMap::default();
 ///                 key_map.insert("kf".into(), "0123456789012345".into());
@@ -220,7 +222,7 @@ pub trait AsyncKmsClientFactory: Send + Sync {
     /// for details of how the configuration is populated and how clients are cached.
     async fn create_client(
         &self,
-        kms_connection_config: &KmsConnectionConfig,
+        kms_connection_info: &KmsConnectionInfo,
     ) -> Result<AsyncKmsClientRef>;
 }
 
@@ -231,21 +233,21 @@ where
 {
     async fn create_client(
         &self,
-        kms_connection_config: &KmsConnectionConfig,
+        kms_connection_info: &KmsConnectionInfo,
     ) -> Result<AsyncKmsClientRef> {
-        self.deref().create_client(kms_connection_config).await
+        self.deref().create_client(kms_connection_info).await
     }
 }
 
 #[async_trait::async_trait]
 impl<T> AsyncKmsClientFactory for T
 where
-    T: Fn(&KmsConnectionConfig) -> BoxFuture<Result<AsyncKmsClientRef>> + Send + Sync + 'static,
+    T: Fn(&KmsConnectionInfo) -> BoxFuture<Result<AsyncKmsClientRef>> + Send + Sync + 'static,
 {
     async fn create_client(
         &self,
-        kms_connection_config: &KmsConnectionConfig,
+        kms_connection_info: &KmsConnectionInfo,
     ) -> Result<AsyncKmsClientRef> {
-        self(kms_connection_config).await
+        self(kms_connection_info).await
     }
 }

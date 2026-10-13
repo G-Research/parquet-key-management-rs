@@ -268,8 +268,8 @@ impl Default for DecryptionConfigurationBuilder {
 /// to create clients for your Key Management Server:
 /// ```no_run
 /// # use parquet_key_management::crypto_factory::CryptoFactory;
-/// # use parquet_key_management::kms::KmsConnectionConfig;
-/// # let kms_client_factory = |config: &KmsConnectionConfig| todo!();
+/// # use parquet_key_management::kms::KmsConnectionInfo;
+/// # let kms_client_factory = |info: &KmsConnectionInfo| todo!();
 /// let crypto_factory = CryptoFactory::new(kms_client_factory);
 /// ```
 ///
@@ -504,7 +504,8 @@ impl CryptoFactory {
 mod tests {
     use super::*;
     use crate::key_material::KeyMaterialBuilder;
-    use crate::test_kms::{KmsConnectionConfigDetails, TestKmsClientFactory};
+    use crate::kms::KmsConnectionInfo;
+    use crate::test_kms::TestKmsClientFactory;
 
     #[test]
     fn test_key_unwrapper() {
@@ -516,7 +517,7 @@ mod tests {
 
         let expected_dek = "1234567890123450".as_bytes().to_vec();
         let kms = TestKmsClientFactory::with_default_keys()
-            .create_client(&Default::default())
+            .create_client(&KmsConnectionConfig::default().connection_info())
             .unwrap();
 
         let wrapped_key = kms.wrap_key(&expected_dek, "kc1").unwrap();
@@ -559,7 +560,7 @@ mod tests {
 
         let dek = "1234567890123450".as_bytes().to_vec();
         let kms = TestKmsClientFactory::with_default_keys()
-            .create_client(&Default::default())
+            .create_client(&KmsConnectionConfig::default().connection_info())
             .unwrap();
 
         let wrapped_key = kms.wrap_key(&dek, "kc1").unwrap();
@@ -579,7 +580,7 @@ mod tests {
 
         // Default config with ID set from the footer key material.
         // The URL isn't read from key material by default.
-        let default_config = KmsConnectionConfigDetails {
+        let default_config = KmsConnectionInfo {
             kms_instance_id: "123".to_string(),
             kms_instance_url: "DEFAULT".to_string(),
             key_access_token: "DEFAULT".to_string(),
@@ -587,7 +588,7 @@ mod tests {
         };
 
         // Expected config after the access token refresh
-        let refreshed_config = KmsConnectionConfigDetails {
+        let refreshed_config = KmsConnectionInfo {
             kms_instance_id: "123".to_string(),
             kms_instance_url: "DEFAULT".to_string(),
             key_access_token: "super_secret".to_string(),
@@ -644,7 +645,7 @@ mod tests {
 
         let dek = "1234567890123450".as_bytes().to_vec();
         let kms = TestKmsClientFactory::with_default_keys()
-            .create_client(&Default::default())
+            .create_client(&KmsConnectionConfig::default().connection_info())
             .unwrap();
         let wrapped_key = kms.wrap_key(&dek, "kc1").unwrap();
 
@@ -659,7 +660,7 @@ mod tests {
         let key_material_1 = footer_key_material("https://example.com/kms1/");
         let key_material_2 = footer_key_material("https://example.com/kms2/");
 
-        let expected_config = |url: &str| KmsConnectionConfigDetails {
+        let expected_config = |url: &str| KmsConnectionInfo {
             kms_instance_id: "123".to_string(),
             kms_instance_url: url.to_string(),
             key_access_token: "DEFAULT".to_string(),
@@ -712,7 +713,7 @@ mod tests {
 
         // The factory should only see "DEFAULT" values, and the client
         // created when writing should be reused when reading.
-        let expected_invocations = vec![KmsConnectionConfigDetails {
+        let expected_invocations = vec![KmsConnectionInfo {
             kms_instance_id: "DEFAULT".to_string(),
             kms_instance_url: "DEFAULT".to_string(),
             key_access_token: "DEFAULT".to_string(),
@@ -739,7 +740,7 @@ mod tests {
 
         let dek = "1234567890123450".as_bytes().to_vec();
         let kms = TestKmsClientFactory::with_default_keys()
-            .create_client(&Default::default())
+            .create_client(&KmsConnectionConfig::default().connection_info())
             .unwrap();
 
         let wrapped_key = kms.wrap_key(&dek, "kc1").unwrap();
@@ -1055,7 +1056,7 @@ mod tests {
         generate_encryption_keys(&kms_config_2);
         assert_eq!(2, kms_factory.keys_wrapped());
         assert_eq!(2, crypto_factory.cache_stats().num_kek_write_caches);
-        let expected_config = |url: &str| KmsConnectionConfigDetails {
+        let expected_config = |url: &str| KmsConnectionInfo {
             kms_instance_id: "123".to_string(),
             kms_instance_url: url.to_string(),
             key_access_token: "DEFAULT".to_string(),
@@ -1177,7 +1178,7 @@ mod tests {
     fn get_kms_connection_config_for_decryption(
         decryption_kms_config: KmsConnectionConfig,
         decryption_config: DecryptionConfiguration,
-    ) -> KmsConnectionConfigDetails {
+    ) -> KmsConnectionInfo {
         let encryption_kms_config = Arc::new(
             KmsConnectionConfig::builder()
                 .set_kms_instance_id("123".to_owned())

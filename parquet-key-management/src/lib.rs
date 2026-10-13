@@ -68,7 +68,7 @@
 //! use parquet_key_management::crypto_factory::{
 //!     CryptoFactory, DecryptionConfiguration, EncryptionConfigurationBuilder,
 //! };
-//! use parquet_key_management::kms::{KmsClient, KmsConnectionConfig};
+//! use parquet_key_management::kms::{KmsClient, KmsConnectionConfig, KmsConnectionInfo};
 //! use parquet_key_management::errors::{Error, Result};
 //! use parquet::file::properties::WriterProperties;
 //! use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
@@ -158,7 +158,7 @@
 //! }
 //!
 //! impl DemoKmsClient {
-//!     pub fn create(_config: &KmsConnectionConfig) -> Result<Arc<dyn KmsClient>> {
+//!     pub fn create(_info: &KmsConnectionInfo) -> Result<Arc<dyn KmsClient>> {
 //!         let mut key_map = HashMap::default();
 //!         key_map.insert("kf".into(), "0123456789012345".into());
 //!         key_map.insert("kc1".into(), "1234567890123450".into());
