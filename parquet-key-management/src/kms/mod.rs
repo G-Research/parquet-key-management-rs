@@ -112,11 +112,16 @@ impl KmsConnectionConfig {
 
 impl fmt::Debug for KmsConnectionConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Don't expose the access token, only indicate whether one has been set
-        let token = self.read_key_access_token();
-        let key_access_token = match token.as_str() {
-            token @ ("" | "DEFAULT") => token,
-            _ => "<redacted>",
+        // Don't expose the access token, only indicate whether one has been set.
+        // Use a non-blocking read, as blocking could deadlock if the current thread
+        // already holds a read lock and another thread is waiting to refresh the token.
+        let key_access_token = match self.key_access_token.try_read() {
+            Ok(token) => match token.as_str() {
+                "" => "",
+                "DEFAULT" => "DEFAULT",
+                _ => "<redacted>",
+            },
+            Err(_) => "<unavailable>",
         };
         f.debug_struct("KmsConnectionConfig")
             .field("kms_instance_url", &self.kms_instance_url)
@@ -259,5 +264,16 @@ mod tests {
         let debug = format!("{config:?}");
         assert!(debug.contains("key_access_token: \"DEFAULT\""), "{debug}");
         assert!(!debug.contains("<redacted>"), "{debug}");
+    }
+
+    #[test]
+    fn debug_does_not_block_while_token_is_locked() {
+        let config = KmsConnectionConfig::builder()
+            .set_key_access_token("secret-token".to_owned())
+            .build();
+        let _write_guard = config.key_access_token.write().unwrap();
+        let debug = format!("{config:?}");
+        assert!(!debug.contains("secret-token"), "{debug}");
+        assert!(debug.contains("<unavailable>"), "{debug}");
     }
 }
