@@ -5,12 +5,8 @@
 #[cfg(feature = "async")]
 mod async_impl;
 
-use crate::crypto::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
-use crate::crypto::rand::{SecureRandom, SystemRandom};
 use crate::errors::{Error, Result};
 use crate::kms::{KmsClient, KmsClientFactory, KmsClientRef, KmsConnectionConfig};
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -114,64 +110,29 @@ impl TestKmsClient {
         }
     }
 
-    fn get_key(&self, master_key_identifier: &str) -> Result<LessSafeKey> {
+    fn get_key(&self, master_key_identifier: &str) -> Result<&[u8]> {
         let key = self.key_map.get(master_key_identifier).ok_or_else(|| {
             Error::General(format!("Invalid master key '{master_key_identifier}'"))
         })?;
-        let key = UnboundKey::new(&AES_128_GCM, key)
-            .map_err(|e| Error::General(format!("Error creating AES key '{e}'")))?;
-        Ok(LessSafeKey::new(key))
+        Ok(key)
     }
 }
 
 impl KmsClient for TestKmsClient {
     fn wrap_key(&self, key_bytes: &[u8], master_key_identifier: &str) -> Result<String> {
-        let key = self.get_key(master_key_identifier)?;
+        let master_key = self.get_key(master_key_identifier)?;
         let aad = master_key_identifier.as_bytes();
-        let rng = SystemRandom::new();
-
-        let mut nonce = [0u8; NONCE_LEN];
-        rng.fill(&mut nonce)?;
-        let nonce = crate::crypto::aead::Nonce::assume_unique_for_key(nonce);
-
-        let tag_len = key.algorithm().tag_len();
-        let mut ciphertext = Vec::with_capacity(NONCE_LEN + key_bytes.len() + tag_len);
-        ciphertext.extend_from_slice(nonce.as_ref());
-        ciphertext.extend_from_slice(key_bytes);
-        let tag =
-            key.seal_in_place_separate_tag(nonce, Aad::from(aad), &mut ciphertext[NONCE_LEN..])?;
-        ciphertext.extend_from_slice(tag.as_ref());
-        let encoded = BASE64_STANDARD.encode(&ciphertext);
-
+        let encoded = crate::key_encryption::encrypt_encryption_key(key_bytes, aad, master_key)?;
         self.keys_wrapped.fetch_add(1, Ordering::Relaxed);
-
         Ok(encoded)
     }
 
     fn unwrap_key(&self, wrapped_key: &str, master_key_identifier: &str) -> Result<Vec<u8>> {
-        let key = self.get_key(master_key_identifier)?;
+        let master_key = self.get_key(master_key_identifier)?;
         let aad = master_key_identifier.as_bytes();
-
-        let wrapped_key = BASE64_STANDARD
-            .decode(wrapped_key)
-            .map_err(|e| Error::General(format!("Error base64 decoding wrapped key: {e}")))?;
-
-        let tag_len = key.algorithm().tag_len();
-        if wrapped_key.len() < NONCE_LEN + tag_len {
-            return Err(Error::General("Wrapped key is too short".to_owned()));
-        }
-
-        let nonce =
-            crate::crypto::aead::Nonce::try_assume_unique_for_key(&wrapped_key[..NONCE_LEN])?;
-
-        let mut plaintext = Vec::with_capacity(wrapped_key.len() - NONCE_LEN);
-        plaintext.extend_from_slice(&wrapped_key[NONCE_LEN..]);
-
-        key.open_in_place(nonce, Aad::from(aad), &mut plaintext)?;
-        plaintext.resize(plaintext.len() - tag_len, 0u8);
-
+        let plaintext =
+            crate::key_encryption::decrypt_encryption_key(wrapped_key, aad, master_key)?;
         self.keys_unwrapped.fetch_add(1, Ordering::Relaxed);
-
         Ok(plaintext)
     }
 }
