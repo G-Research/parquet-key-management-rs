@@ -58,8 +58,8 @@
 //! `KmsClient` implementations are compatible.
 //!
 //! # Example of writing then reading an encrypted Parquet file
-#![cfg_attr(feature = "parquet", doc = "```")]
-#![cfg_attr(not(feature = "parquet"), doc = "```ignore")]
+#![cfg_attr(all(feature = "parquet", feature = "ring"), doc = "```")]
+#![cfg_attr(not(all(feature = "parquet", feature = "ring")), doc = "```ignore")]
 //! use arrow_array::{ArrayRef, Float32Array, Int32Array, RecordBatch};
 //! use base64::prelude::BASE64_STANDARD;
 //! use base64::Engine;
@@ -247,6 +247,7 @@
 )]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+mod crypto;
 pub mod crypto_factory;
 #[cfg(feature = "datafusion")]
 pub mod datafusion;

@@ -90,8 +90,16 @@ jobs:
         run: cargo build --all-features --verbose
       - name: Test with all features
         run: cargo test --all-features --verbose
-      - name: Test with no features
-        run: cargo test --no-default-features --package parquet-key-management --verbose
+      - name: Test with only ring
+        run: cargo test --package parquet-key-management --no-default-features --features ring --verbose
+      - name: Test with only aws-lc-rs
+        run: cargo test --package parquet-key-management --no-default-features --features aws-lc-rs --verbose
+      - name: Test with aws-lc-rs and all other non-ring features
+        shell: bash
+        run: |
+          features=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "parquet-key-management") | .features | keys - ["default", "ring"] | join(",")')
+          cargo test --package parquet-key-management --no-default-features --features "$features" --verbose
       - name: Install uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
         with:
@@ -114,8 +122,11 @@ jobs:
           restore-keys: cargo-cache-feature-check-
       - name: Install cargo-hack
         run: cargo install --locked cargo-hack
-      - name: Check each feature
-        run: cargo hack check --each-feature --no-dev-deps --package parquet-key-management
+      # One of the ring or aws-lc-rs features must be enabled, so check each feature with each backend
+      - name: Check each feature with ring
+        run: cargo hack check --each-feature --no-dev-deps --package parquet-key-management --features ring --exclude-features aws-lc-rs
+      - name: Check each feature with aws-lc-rs
+        run: cargo hack check --each-feature --no-dev-deps --package parquet-key-management --features aws-lc-rs --exclude-features ring,default
 
   msrv:
     # We maintain a Cargo.lock.msrv file with the minimum set of dependencies

@@ -1,10 +1,10 @@
 //! Encryption and decryption of data encryption keys (DEKs) with key encryption keys (KEKs)
 
+use crate::crypto::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_128_GCM, NONCE_LEN};
+use crate::crypto::rand::{SecureRandom, SystemRandom};
 use crate::errors::{Error, Result};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
-use ring::aead::{Aad, LessSafeKey, UnboundKey, AES_128_GCM, NONCE_LEN};
-use ring::rand::{SecureRandom, SystemRandom};
 
 /// Encrypt a DEK with a KEK using AES-GCM
 pub(crate) fn encrypt_encryption_key(
@@ -23,7 +23,7 @@ pub(crate) fn encrypt_encryption_key(
     let rng = SystemRandom::new();
     let mut nonce = [0u8; NONCE_LEN];
     rng.fill(&mut nonce)?;
-    let nonce = ring::aead::Nonce::assume_unique_for_key(nonce);
+    let nonce = Nonce::assume_unique_for_key(nonce);
 
     let mut ciphertext = Vec::with_capacity(NONCE_LEN + dek.len() + algorithm.tag_len());
     ciphertext.extend_from_slice(nonce.as_ref());
@@ -59,7 +59,7 @@ pub(crate) fn decrypt_encryption_key(
         ));
     }
 
-    let nonce = ring::aead::Nonce::try_assume_unique_for_key(&encrypted_key[..NONCE_LEN])?;
+    let nonce = Nonce::try_assume_unique_for_key(&encrypted_key[..NONCE_LEN])?;
 
     let mut plaintext = Vec::with_capacity(encrypted_key.len() - NONCE_LEN);
     plaintext.extend_from_slice(&encrypted_key[NONCE_LEN..]);

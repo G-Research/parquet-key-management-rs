@@ -1,6 +1,7 @@
 //! The key-management tools API for building file encryption and decryption properties
 //! that work with a Key Management Server.
 
+use crate::crypto::rand::{SecureRandom, SystemRandom};
 use crate::encryption_keys::{EncryptionKey, FileEncryptionKeys};
 use crate::errors::{Error, Result};
 use crate::key_unwrapper::KeyUnwrapper;
@@ -13,7 +14,6 @@ use crate::kms_manager::KmsManager;
 use parquet::encryption::decrypt::FileDecryptionProperties;
 #[cfg(feature = "parquet")]
 use parquet::encryption::encrypt::FileEncryptionProperties;
-use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -629,6 +629,7 @@ mod tests {
 
     #[test]
     fn test_kms_client_caching_with_different_urls() {
+        let _time_controller = crate::kms_manager::mock_time::time_controller();
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
         // The KMS config is updated from the footer key metadata per file,
@@ -689,6 +690,7 @@ mod tests {
 
     #[test]
     fn test_kms_client_caching_with_default_instance() {
+        let _time_controller = crate::kms_manager::mock_time::time_controller();
         let kms_factory = Arc::new(TestKmsClientFactory::with_default_keys());
         let crypto_factory = CryptoFactory::new(kms_factory.clone());
         // Instance ID and URL are not set, so default values are used
@@ -1023,6 +1025,7 @@ mod tests {
     /// KEKs wrapped by one KMS instance must not be reused when encrypting with another instance
     #[test]
     fn test_encryption_key_encryption_key_caching_with_different_urls() {
+        let _time_controller = crate::kms_manager::mock_time::time_controller();
         let kms_config = |url: &str| {
             Arc::new(
                 KmsConnectionConfig::builder()
