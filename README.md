@@ -39,7 +39,7 @@ One of the `ring` or `aws-lc-rs` features must be enabled.
 To use aws-lc-rs, disable default features and enable the `aws-lc-rs` feature, for example:
 
 ```toml
-parquet-key-management = { version = "0.7", default-features = false, features = ["parquet", "aws-lc-rs"] }
+parquet-key-management = { version = "0.8", default-features = false, features = ["parquet", "aws-lc-rs"] }
 ```
 
 If both features are enabled, aws-lc-rs is used.
