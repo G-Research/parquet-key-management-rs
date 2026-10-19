@@ -1,9 +1,9 @@
 mod wrap;
 
 use crate::errors::Result;
-use crate::kms::{AsyncKmsClientFactory, AsyncKmsClientRef, KmsClientFactory, KmsConnectionConfig};
+use crate::kms::{AsyncKmsClientFactory, AsyncKmsClientRef, KmsClientFactory, KmsConnectionInfo};
 use crate::test_kms::async_impl::wrap::WrappingAsyncKmsClient;
-use crate::test_kms::{KmsConnectionConfigDetails, TestKmsClientFactory};
+use crate::test_kms::TestKmsClientFactory;
 use std::sync::Arc;
 
 /// Factory for building asynchronous KMS client instances wrapping synchronous
@@ -23,7 +23,7 @@ impl TestAsyncKmsClientFactory {
 
     /// Get the configuration details used to create clients.
     /// Provided for unit testing
-    pub fn invocations(&self) -> Vec<KmsConnectionConfigDetails> {
+    pub fn invocations(&self) -> Vec<KmsConnectionInfo> {
         self.inner.invocations()
     }
 
@@ -40,9 +40,9 @@ impl TestAsyncKmsClientFactory {
 
 #[async_trait::async_trait]
 impl AsyncKmsClientFactory for TestAsyncKmsClientFactory {
-    async fn create_client(&self, config: &KmsConnectionConfig) -> Result<AsyncKmsClientRef> {
+    async fn create_client(&self, info: &KmsConnectionInfo) -> Result<AsyncKmsClientRef> {
         Ok(Arc::new(WrappingAsyncKmsClient::new(
-            self.inner.create_client(config)?,
+            self.inner.create_client(info)?,
         )))
     }
 }
