@@ -112,7 +112,29 @@ pub(crate) struct ExpiringCache<TKey, TValue> {
     last_cleanup: Mutex<Instant>,
 }
 
-type CacheSlot<TValue> = Mutex<Option<ExpiringCacheValue<TValue>>>;
+type CacheSlot<TValue> = Mutex<SlotState<TValue>>;
+
+struct SlotState<TValue> {
+    value: Option<ExpiringCacheValue<TValue>>,
+    /// Set when the slot has been removed from the cache, so that any request still holding
+    /// a reference to the slot knows to retry with a new slot rather than using this one.
+    removed: bool,
+}
+
+impl<TValue> Default for SlotState<TValue> {
+    fn default() -> Self {
+        Self {
+            value: None,
+            removed: false,
+        }
+    }
+}
+
+impl<TValue> SlotState<TValue> {
+    fn has_valid_value(&self) -> bool {
+        self.value.as_ref().is_some_and(|value| value.is_valid())
+    }
+}
 
 #[derive(Debug)]
 struct ExpiringCacheValue<TValue> {
@@ -136,10 +158,6 @@ impl<TValue> ExpiringCacheValue<TValue> {
     }
 }
 
-fn has_valid_value<TValue>(slot: &Option<ExpiringCacheValue<TValue>>) -> bool {
-    slot.as_ref().is_some_and(|value| value.is_valid())
-}
-
 impl<TKey, TValue> ExpiringCache<TKey, TValue>
 where
     TKey: Clone + Eq + Hash,
@@ -155,6 +173,7 @@ where
     /// Get the cached value for a key, or create it if there is no valid cached value.
     /// The creator function is called without holding the lock on the whole cache,
     /// so it only blocks other requests for the same key.
+    /// If the creator fails, the key's slot is removed so that failed keys don't accumulate.
     pub fn get_or_create<F>(
         &self,
         key: TKey,
@@ -164,17 +183,54 @@ where
     where
         F: FnOnce() -> Result<TValue>,
     {
-        let slot = self.slots.lock().unwrap().entry(key).or_default().clone();
-        // The lock is only poisoned if a creator function panicked, which leaves either no value
-        // or a previously cached value in the slot, so it's safe to ignore the poisoning.
-        let mut slot = slot.lock().unwrap_or_else(PoisonError::into_inner);
-        match &*slot {
-            Some(value) if value.is_valid() => Ok(value.value.clone()),
-            _ => {
-                let value = creator()?;
-                *slot = Some(ExpiringCacheValue::new(value.clone(), cache_lifetime));
-                Ok(value)
+        loop {
+            let slot = self
+                .slots
+                .lock()
+                .unwrap()
+                .entry(key.clone())
+                .or_default()
+                .clone();
+            // The lock is only poisoned if a creator function panicked, which leaves either no value
+            // or a previously cached value in the slot, so it's safe to ignore the poisoning.
+            let mut state = slot.lock().unwrap_or_else(PoisonError::into_inner);
+            if state.removed {
+                // The slot was removed from the cache after we got it from the map,
+                // either because it expired or because creating its value failed.
+                continue;
             }
+            if let Some(value) = &state.value {
+                if value.is_valid() {
+                    return Ok(value.value.clone());
+                }
+            }
+            return match creator() {
+                Ok(value) => {
+                    state.value = Some(ExpiringCacheValue::new(value.clone(), cache_lifetime));
+                    Ok(value)
+                }
+                Err(e) => {
+                    self.remove_slot(&key, &slot, &mut state);
+                    Err(e)
+                }
+            };
+        }
+    }
+
+    /// Remove a slot from the cache. The slot's lock must be held by the caller.
+    fn remove_slot(
+        &self,
+        key: &TKey,
+        slot: &Arc<CacheSlot<TValue>>,
+        state: &mut SlotState<TValue>,
+    ) {
+        state.removed = true;
+        let mut slots = self.slots.lock().unwrap();
+        if slots
+            .get(key)
+            .is_some_and(|map_slot| Arc::ptr_eq(map_slot, slot))
+        {
+            slots.remove(key);
         }
     }
 
@@ -189,30 +245,26 @@ where
             *last_cleanup = instant_now;
         }
 
-        self.slots
-            .lock()
-            .unwrap()
-            .retain(|_, slot| match slot.try_lock() {
-                Ok(slot) => has_valid_value(&slot),
-                Err(TryLockError::Poisoned(slot)) => has_valid_value(&slot.into_inner()),
+        self.slots.lock().unwrap().retain(|_, slot| {
+            let mut state = match slot.try_lock() {
+                Ok(state) => state,
+                Err(TryLockError::Poisoned(state)) => state.into_inner(),
                 // A value is currently being created for this key
-                Err(TryLockError::WouldBlock) => true,
-            });
+                Err(TryLockError::WouldBlock) => return true,
+            };
+            // Mark the slot as removed while holding its lock, so that a concurrent
+            // request that already has a reference to it won't store a value in it.
+            let keep = state.has_valid_value();
+            state.removed = !keep;
+            keep
+        });
     }
 
-    /// Get the number of values in the cache, including expired values that haven't been removed
+    /// Get the number of entries in the cache, including expired values that haven't been
+    /// removed and values that are currently being created
     #[cfg(test)]
     pub fn len(&self) -> usize {
-        self.slots
-            .lock()
-            .unwrap()
-            .values()
-            .filter(|slot| {
-                slot.lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .is_some()
-            })
-            .count()
+        self.slots.lock().unwrap().len()
     }
 }
 
@@ -483,7 +535,17 @@ mod tests {
         .join();
         assert!(result.is_err());
 
+        // The panic leaves an empty slot behind, which can be cleared or reused
+        assert_eq!(cache.len(), 1);
+        cache.clear_expired(Duration::ZERO);
         assert_eq!(cache.len(), 0);
+        let result = thread::spawn({
+            let cache = cache.clone();
+            move || cache.get_or_create("a", None, || panic!("Creation failed"))
+        })
+        .join();
+        assert!(result.is_err());
+
         assert_eq!(cache.get_or_create("a", None, || Ok(1)).unwrap(), 1);
         assert_eq!(cache.get_or_create("b", None, || Ok(2)).unwrap(), 2);
         cache.clear_expired(Duration::ZERO);
@@ -497,5 +559,63 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(cache.len(), 0);
         assert_eq!(cache.get_or_create("a", None, || Ok(1)).unwrap(), 1);
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_cache_waiting_request_retries_after_creation_error() {
+        let cache = Arc::new(ExpiringCache::<&str, i32>::new());
+        let (started_sender, started_receiver) = mpsc::channel();
+        let (release_sender, release_receiver) = mpsc::channel::<()>();
+
+        let failed_creation = {
+            let cache = cache.clone();
+            thread::spawn(move || {
+                cache.get_or_create("a", None, || {
+                    started_sender.send(()).unwrap();
+                    release_receiver.recv().unwrap();
+                    Err(Error::General("Failed".to_owned()))
+                })
+            })
+        };
+        started_receiver
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap();
+
+        // Start a second request that waits on the slot for "a" while the first creation is in
+        // progress. The failed creation removes the slot, so this request must create the value
+        // in a new slot rather than in the removed one.
+        let waiting_creation = {
+            let cache = cache.clone();
+            thread::spawn(move || cache.get_or_create("a", None, || Ok(2)))
+        };
+        thread::sleep(Duration::from_millis(100));
+        release_sender.send(()).unwrap();
+
+        assert!(failed_creation.join().unwrap().is_err());
+        assert_eq!(waiting_creation.join().unwrap().unwrap(), 2);
+        assert_eq!(cache.len(), 1);
+        assert_eq!(
+            cache
+                .get_or_create("a", None, || panic!("Should be cached"))
+                .unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn test_cache_cleared_slot_is_not_reused() {
+        let time_controller = mock_time::time_controller();
+        let cache = ExpiringCache::<&str, i32>::new();
+        cache
+            .get_or_create("a", Some(Duration::from_secs(10)), || Ok(1))
+            .unwrap();
+
+        // Simulate a request that got the slot from the map before it was cleared
+        let slot = cache.slots.lock().unwrap().get("a").unwrap().clone();
+        time_controller.advance(Duration::from_secs(20));
+        cache.clear_expired(Duration::from_secs(10));
+        assert_eq!(cache.len(), 0);
+        assert!(slot.lock().unwrap().removed);
     }
 }
