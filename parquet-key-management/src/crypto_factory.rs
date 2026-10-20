@@ -1298,7 +1298,18 @@ mod tests {
             let metadata = column_key.metadata().to_vec();
             thread::spawn(move || key_unwrapper.unwrap_key(&metadata))
         };
-        started_receiver.recv().unwrap();
+        if started_receiver
+            .recv_timeout(Duration::from_secs(10))
+            .is_err()
+        {
+            if slow_unwrap.is_finished() {
+                panic!(
+                    "Column key unwrap completed without blocking in the KMS: {:?}",
+                    slow_unwrap.join()
+                );
+            }
+            panic!("Column key unwrap did not reach the KMS");
+        }
 
         // The footer key uses a different KEK, so can be unwrapped while the column KEK
         // is being unwrapped.
