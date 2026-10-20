@@ -63,7 +63,9 @@ impl KeyUnwrapper {
         wrapped_kek: &str,
     ) -> Result<Vec<u8>> {
         let kek = self.kek_cache.get_or_create(kek_id.to_owned(), None, || {
-            self.kms_client()?.unwrap_key(wrapped_kek, master_key_id)
+            self.kms_client()?
+                .unwrap_key(wrapped_kek, master_key_id)
+                .map(Arc::from)
         })?;
         let decoded_kek_id = BASE64_STANDARD.decode(kek_id).map_err(|e| {
             Error::General(format!(

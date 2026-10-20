@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 /// Cache of key encryption keys (KEKs) to use when decrypting files,
 /// keyed by their base64 encoded key id
-pub(crate) type KekReadCache = Arc<ExpiringCache<String, Vec<u8>>>;
+pub(crate) type KekReadCache = Arc<ExpiringCache<String, Arc<[u8]>>>;
 
 // Key encryption key (KEK) struct with extra metadata required when encrypting files
 pub(crate) struct KeyEncryptionKey {
