@@ -2,13 +2,12 @@ use crate::crypto_factory::DecryptionConfiguration;
 use crate::errors::{Error, Result};
 use crate::key_encryption;
 use crate::key_material::KeyMaterial;
-use crate::kms::KmsConnectionConfig;
+use crate::kms::{KmsClientRef, KmsConnectionConfig};
 use crate::kms_manager::{KekReadCache, KmsManager};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 #[cfg(feature = "parquet")]
 use parquet::encryption::decrypt::KeyRetriever;
-use std::collections::hash_map::Entry;
 use std::sync::{Arc, RwLock};
 
 /// Unwraps (decrypts) key encryption keys and data encryption keys using a KMS
@@ -41,13 +40,19 @@ impl KeyUnwrapper {
         }
     }
 
-    fn unwrap_single_wrapped_key(&self, wrapped_dek: &str, master_key_id: &str) -> Result<Vec<u8>> {
-        let kms_connection_config = self.kms_connection_config.read().unwrap();
-        let client = self.kms_manager.get_client(
+    /// Get a KMS client for the current connection configuration.
+    /// The configuration lock is released before getting the client, so it isn't held
+    /// while the client is created or used.
+    fn kms_client(&self) -> Result<KmsClientRef> {
+        let kms_connection_config = self.kms_connection_config.read().unwrap().clone();
+        self.kms_manager.get_client(
             &kms_connection_config,
             self.decryption_configuration.cache_lifetime(),
-        )?;
-        client.unwrap_key(wrapped_dek, master_key_id)
+        )
+    }
+
+    fn unwrap_single_wrapped_key(&self, wrapped_dek: &str, master_key_id: &str) -> Result<Vec<u8>> {
+        self.kms_client()?.unwrap_key(wrapped_dek, master_key_id)
     }
 
     fn unwrap_double_wrapped_key(
@@ -57,25 +62,17 @@ impl KeyUnwrapper {
         kek_id: &str,
         wrapped_kek: &str,
     ) -> Result<Vec<u8>> {
-        let mut kek_cache = self.kek_cache.lock().unwrap();
-        let kek = match kek_cache.entry(kek_id.to_owned()) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => {
-                let kms_connection_config = self.kms_connection_config.read().unwrap();
-                let client = self.kms_manager.get_client(
-                    &kms_connection_config,
-                    self.decryption_configuration.cache_lifetime(),
-                )?;
-                let kek = client.unwrap_key(wrapped_kek, master_key_id)?;
-                entry.insert(kek)
-            }
-        };
+        let kek = self.kek_cache.get_or_create(kek_id.to_owned(), None, || {
+            self.kms_client()?
+                .unwrap_key(wrapped_kek, master_key_id)
+                .map(Arc::from)
+        })?;
         let decoded_kek_id = BASE64_STANDARD.decode(kek_id).map_err(|e| {
             Error::General(format!(
                 "Could not base64 decode key encryption key id: {e}"
             ))
         })?;
-        key_encryption::decrypt_encryption_key(wrapped_dek, &decoded_kek_id, kek)
+        key_encryption::decrypt_encryption_key(wrapped_dek, &decoded_kek_id, &kek)
     }
 
     /// If the KMS instance ID or URL weren't provided in the connection configuration,

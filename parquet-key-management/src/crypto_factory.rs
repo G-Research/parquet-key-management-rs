@@ -504,8 +504,10 @@ impl CryptoFactory {
 mod tests {
     use super::*;
     use crate::key_material::KeyMaterialBuilder;
-    use crate::kms::KmsConnectionInfo;
+    use crate::kms::{KmsClient, KmsClientRef, KmsConnectionInfo};
     use crate::test_kms::TestKmsClientFactory;
+    use std::sync::{mpsc, Mutex};
+    use std::thread;
 
     #[test]
     fn test_key_unwrapper() {
@@ -1220,5 +1222,115 @@ mod tests {
         let mut invocations = kms_factory.invocations();
         assert_eq!(invocations.len(), 1);
         invocations.pop().unwrap()
+    }
+
+    /// A KMS client factory that blocks unwrapping keys with one master key until released
+    struct BlockingKmsClientFactory {
+        inner: TestKmsClientFactory,
+        blocked_master_key: String,
+        started: Mutex<mpsc::Sender<()>>,
+        release: Arc<Mutex<mpsc::Receiver<()>>>,
+    }
+
+    struct BlockingKmsClient {
+        inner: KmsClientRef,
+        blocked_master_key: String,
+        started: Mutex<mpsc::Sender<()>>,
+        release: Arc<Mutex<mpsc::Receiver<()>>>,
+    }
+
+    impl KmsClientFactory for BlockingKmsClientFactory {
+        fn create_client(&self, kms_connection_info: &KmsConnectionInfo) -> Result<KmsClientRef> {
+            Ok(Arc::new(BlockingKmsClient {
+                inner: self.inner.create_client(kms_connection_info)?,
+                blocked_master_key: self.blocked_master_key.clone(),
+                started: Mutex::new(self.started.lock().unwrap().clone()),
+                release: self.release.clone(),
+            }))
+        }
+    }
+
+    impl KmsClient for BlockingKmsClient {
+        fn wrap_key(&self, key_bytes: &[u8], master_key_identifier: &str) -> Result<String> {
+            self.inner.wrap_key(key_bytes, master_key_identifier)
+        }
+
+        fn unwrap_key(&self, wrapped_key: &str, master_key_identifier: &str) -> Result<Vec<u8>> {
+            if master_key_identifier == self.blocked_master_key {
+                self.started.lock().unwrap().send(()).unwrap();
+                self.release.lock().unwrap().recv().unwrap();
+            }
+            self.inner.unwrap_key(wrapped_key, master_key_identifier)
+        }
+    }
+
+    #[test]
+    fn test_slow_kek_unwrap_does_not_block_other_keys() {
+        let kms_config = Arc::new(KmsConnectionConfig::default());
+        let encryption_config = EncryptionConfigurationBuilder::new("kf".to_owned())
+            .set_double_wrapping(true)
+            .add_column_key("kc1".to_owned(), vec!["x0".to_owned()])
+            .build()
+            .unwrap();
+        let file_encryption_keys = CryptoFactory::new(TestKmsClientFactory::with_default_keys())
+            .file_encryption_keys(kms_config.clone(), &encryption_config)
+            .unwrap();
+        let footer_key = file_encryption_keys.footer_key();
+        let (_, column_key) = file_encryption_keys.column_keys().next().unwrap();
+
+        let (started_sender, started_receiver) = mpsc::channel();
+        let (release_sender, release_receiver) = mpsc::channel();
+        let crypto_factory = CryptoFactory::new(BlockingKmsClientFactory {
+            inner: TestKmsClientFactory::with_default_keys(),
+            blocked_master_key: "kc1".to_owned(),
+            started: Mutex::new(started_sender),
+            release: Arc::new(Mutex::new(release_receiver)),
+        });
+        let key_unwrapper = Arc::new(
+            crypto_factory
+                .key_unwrapper(kms_config, Default::default())
+                .unwrap(),
+        );
+
+        // Start unwrapping the column key, which blocks in the KMS
+        let slow_unwrap = {
+            let key_unwrapper = key_unwrapper.clone();
+            let metadata = column_key.metadata().to_vec();
+            thread::spawn(move || key_unwrapper.unwrap_key(&metadata))
+        };
+        if started_receiver
+            .recv_timeout(Duration::from_secs(10))
+            .is_err()
+        {
+            if slow_unwrap.is_finished() {
+                panic!(
+                    "Column key unwrap completed without blocking in the KMS: {:?}",
+                    slow_unwrap.join()
+                );
+            }
+            panic!("Column key unwrap did not reach the KMS");
+        }
+
+        // The footer key uses a different KEK, so can be unwrapped while the column KEK
+        // is being unwrapped.
+        let (result_sender, result_receiver) = mpsc::channel();
+        {
+            let key_unwrapper = key_unwrapper.clone();
+            let metadata = footer_key.metadata().to_vec();
+            thread::spawn(move || {
+                result_sender
+                    .send(key_unwrapper.unwrap_key(&metadata))
+                    .unwrap()
+            });
+        }
+        let unwrapped_footer_key = result_receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("Unwrapping footer key was blocked by unwrapping column key")
+            .unwrap();
+        assert_eq!(unwrapped_footer_key, footer_key.key());
+
+        release_sender.send(()).unwrap();
+        let unwrapped_column_key = slow_unwrap.join().unwrap().unwrap();
+        assert_eq!(unwrapped_column_key, column_key.key());
     }
 }
