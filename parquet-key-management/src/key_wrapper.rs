@@ -7,7 +7,6 @@ use crate::kms::KmsConnectionConfig;
 use crate::kms_manager::{KekWriteCache, KeyEncryptionKey, KmsManager};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -55,16 +54,17 @@ impl<'a> KeyWrapper<'a> {
         };
 
         let key_material = if self.encryption_configuration.double_wrapping() {
-            let mut master_key_to_kek = self.master_key_to_kek.lock().unwrap();
-            let kek = match master_key_to_kek.entry(master_key_id.to_owned()) {
-                Entry::Occupied(kek) => kek.into_mut(),
-                Entry::Vacant(entry) => entry.insert(generate_key_encryption_key(
-                    master_key_id,
-                    self.kms_manager,
-                    &self.kms_connection_config,
-                    self.encryption_configuration.cache_lifetime(),
-                )?),
-            };
+            let kek =
+                self.master_key_to_kek
+                    .get_or_create(master_key_id.to_owned(), None, || {
+                        generate_key_encryption_key(
+                            master_key_id,
+                            self.kms_manager,
+                            &self.kms_connection_config,
+                            self.encryption_configuration.cache_lifetime(),
+                        )
+                        .map(Arc::new)
+                    })?;
 
             let wrapped_dek = encrypt_encryption_key(key, &kek.key_id, &kek.key)?;
 
