@@ -22,6 +22,20 @@ traits.
 Please see the [API documentation](https://docs.rs/parquet-key-management/latest/parquet_key_management/)
 for examples of how to use this library and the full API reference.
 
+## Dependency versions
+
+The `parquet`, `arrow` and DataFusion requirements each span several major versions.
+Cargo does not unify a dependency across major versions, so a project that uses an
+older version within the supported range can end up with a second, newer copy for this
+crate and incompatible types. In that case pin this crate's copies to your versions,
+for example:
+
+```sh
+cargo update -p parquet@59.3.2 --precise 58.4.1
+```
+
+(and likewise for `arrow`, `datafusion-common` and `datafusion-execution`).
+
 ## Feature Flags
 
 The `parquet_key_management` crate provides the following features which may be enabled in your `Cargo.toml`:

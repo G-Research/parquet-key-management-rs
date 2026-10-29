@@ -1,5 +1,6 @@
 [workspace]
 members = ["parquet-key-management", "generate-test-files"]
+exclude = ["delta-rs-tests"]
 resolver = "2"
 
 [workspace.package]
@@ -12,10 +13,10 @@ edition = "2021"
 rust-version = "1.88.0"
 
 [workspace.dependencies]
-arrow = { version = ">=57.2, <59", default-features = false }
-arrow-array = { version = ">=57.2, <59", default-features = false }
-arrow-schema = { version = ">=57.2, <59", default-features = false }
+arrow = { version = ">=57.2, <60", default-features = false }
+arrow-array = { version = ">=57.2, <60", default-features = false }
+arrow-schema = { version = ">=57.2, <60", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
-parquet = { version = ">=57.2, <59", default-features = false, features = ["encryption"] }
+parquet = { version = ">=57.2, <60", default-features = false, features = ["encryption"] }
 tempfile = { version = "3.24", default-features = false }
 tokio = { version = "1.52", default-features = false, features = ["rt-multi-thread"] }
