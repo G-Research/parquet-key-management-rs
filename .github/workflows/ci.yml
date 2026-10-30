@@ -27,7 +27,9 @@ jobs:
           key: cargo-cache-lint-rust-${{ hashFiles('Cargo.toml') }}
           restore-keys: cargo-cache-lint-rust-
       - name: Format check
-        run: cargo fmt --verbose --check
+        run: |
+          cargo fmt --verbose --check
+          cargo fmt --verbose --check --manifest-path delta-rs-tests/Cargo.toml
       - name: Clippy
         run: cargo clippy --all-features --verbose -- --deny warnings
 
@@ -128,6 +130,24 @@ jobs:
       - name: Check each feature with aws-lc-rs
         run: cargo hack check --each-feature --no-dev-deps --package parquet-key-management --features aws-lc-rs --exclude-features ring,default
 
+  delta-rs-tests:
+    # The delta-rs fork we test against pins DataFusion and arrow below the newest
+    # versions the library allows, so these tests live in a workspace-excluded crate
+    # with its own Cargo.lock (see delta-rs-tests/Cargo.toml).
+    name: Test with delta-rs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - name: Cache cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: |
+            ~/.cargo
+          key: cargo-cache-delta-rs-tests-${{ hashFiles('delta-rs-tests/Cargo.lock') }}
+          restore-keys: cargo-cache-delta-rs-tests-
+      - name: Test
+        run: cargo test --locked --manifest-path delta-rs-tests/Cargo.toml --verbose
+
   msrv:
     # We maintain a Cargo.lock.msrv file with the minimum set of dependencies
     # required. This is used to determine the minimum supported rust version (MSRV)
@@ -170,6 +190,7 @@ jobs:
       - docs
       - test
       - feature-check
+      - delta-rs-tests
       - msrv
     env:
       RESULTS: ${{ join(needs.*.result, ',') }}
@@ -177,12 +198,12 @@ jobs:
     steps:
       - name: "Success"
         # we expect all required jobs to have success result
-        if: env.RESULTS == 'success,success,success,success,success,success'
+        if: env.RESULTS == 'success,success,success,success,success,success,success'
         run: true
         shell: bash
       - name: "Failure"
         # we expect all required jobs to have success result, fail otherwise
-        if: env.RESULTS != 'success,success,success,success,success,success'
+        if: env.RESULTS != 'success,success,success,success,success,success,success'
         run: false
         shell: bash
 

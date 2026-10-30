@@ -1,0 +1,26 @@
+# Integration tests against the G-Research fork of delta-rs. The fork pins DataFusion
+# and arrow below the newest versions the library allows, and cargo does not unify a
+# dependency across major versions, so this crate is excluded from the workspace and
+# resolved by its own committed Cargo.lock.
+[package]
+name = "delta-rs-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dev-dependencies]
+arrow = { version = "58", default-features = false }
+arrow-schema = { version = "58", default-features = false }
+async-trait = { version = "0.1.89" }
+datafusion = { version = "54", default-features = false, features = ["parquet", "parquet_encryption"] }
+deltalake-core = { git = "https://github.com/G-Research-Forks/delta-rs", tag = "0.32.4-gr.1", features = [
+  "datafusion",
+] }
+object_store = { version = "0.13", default-features = false }
+parquet = { version = "58", default-features = false, features = ["encryption", "arrow"] }
+parquet-key-management = { path = "../parquet-key-management", features = ["datafusion", "tokio", "_test_utils"] }
+paste = { version = "1.0.15" }
+tempfile = { version = "3.24", default-features = false }
+tokio = { version = "1.52", default-features = false, features = ["rt-multi-thread", "macros"] }
+url = { version = "2.5.7" }
+uuid = { version = "1.23", features = ["v4"] }

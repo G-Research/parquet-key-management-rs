@@ -22,10 +22,10 @@ serde_json = { version = "1.0.60", default-features = false, features = ["std"] 
 # optional
 async-std = { version = "1", optional = true }
 aws-lc-rs = { version = "1.12", default-features = false, features = ["aws-lc-sys"], optional = true }
-datafusion-execution = { version = ">=52.1.0, <55", default-features = false, features = [
+datafusion-execution = { version = ">=52.1.0, <56", default-features = false, features = [
   "parquet_encryption",
 ], optional = true }
-datafusion-common = { version = ">=52.1.0, <55", default-features = false, features = [
+datafusion-common = { version = ">=52.1.0, <56", default-features = false, features = [
   "parquet",
   "parquet_encryption",
 ], optional = true }
@@ -41,19 +41,13 @@ arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 async-compat = { version = "0.2", default-features = false }
-datafusion = { version = ">=52.1.0, <55", default-features = false, features = ["parquet", "parquet_encryption"] }
+datafusion = { version = ">=52.1.0, <56", default-features = false, features = ["parquet", "parquet_encryption"] }
 futures = { workspace = true }
 object_store = { version = ">=0.12.5, <0.14", default-features = false }
 parquet = { workspace = true, features = ["arrow"] }
-paste = { version = "1.0.15" }
 ring = { version = "0.17", default-features = false, features = ["std"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
-url = { version = "2.5.7" }
-uuid = { version = "1.23", features = ["v4"] }
-deltalake-core = { git = "https://github.com/G-Research-Forks/delta-rs", tag = "0.32.4-gr.1", features = [
-  "datafusion",
-] }
 
 [features]
 default = ["parquet", "ring"]
@@ -86,7 +80,3 @@ required-features = ["_test_utils", "async"]
 [[test]]
 name = "datafusion_round_trip"
 required-features = ["_test_utils", "datafusion"]
-
-[[test]]
-name = "delta_rs_kms"
-required-features = ["_test_utils", "datafusion", "tokio"]
